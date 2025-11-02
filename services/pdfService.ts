@@ -64,10 +64,6 @@ const addHeader = async (doc: jsPDF) => {
     } catch (error) {
         console.error("Failed to generate logo for PDF:", error);
     }
-
-    doc.setFontSize(18);
-    doc.setTextColor("#D97706");
-    doc.text("Bienve App", 40, 22);
 };
 
 export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
@@ -119,7 +115,7 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 20, yPos);
     
     const weekId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    doc.save(`horario_semanal_Bienve_App_${weekId}.pdf`);
+    doc.save(`horario_semanal_${weekId}.pdf`);
 };
 
 export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
@@ -209,5 +205,5 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, margin, yPos);
 
     const monthId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    doc.save(`horario_mensual_Bienve_App_${monthId}.pdf`);
+    doc.save(`horario_mensual_${monthId}.pdf`);
 };
