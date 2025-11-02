@@ -1,17 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  console.warn("API_KEY for Gemini is not set in environment variables.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
-
 export const parseShiftWithAI = async (text: string): Promise<string> => {
+    const API_KEY = process.env.API_KEY;
+
     if (!API_KEY) {
-        throw new Error("API key not configured.");
+        // Ahora este error solo ocurrirá si se intenta usar la función de voz,
+        // no al cargar la aplicación.
+        console.error("La clave de API de Gemini no está configurada en el entorno. Por favor, añádela en Vercel.");
+        throw new Error("La clave de API no está configurada.");
     }
+
+    // Inicializa el cliente de la IA justo a tiempo (Just-In-Time)
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
+
     if (!text) {
         return "";
     }
