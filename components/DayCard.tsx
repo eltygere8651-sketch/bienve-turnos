@@ -40,14 +40,16 @@ const DayCard: React.FC<DayCardProps> = ({ day, onEdit, isToday }) => {
     };
 
     return (
-        <div 
-            className={`rounded-xl shadow-lg p-3 flex flex-col justify-between border-2 transition-all duration-300 ease-in-out transform hover:-translate-y-1 active:scale-95 cursor-pointer ${getCardClasses()}`}
+        <button
+            type="button"
+            className={`rounded-xl shadow-lg p-3 w-full flex flex-col justify-between border-2 transition-all duration-300 ease-in-out transform hover:-translate-y-1 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-400 ${getCardClasses()}`}
             onClick={() => onEdit(day)}
+            aria-label={`Editar turno para ${formatDayName(day.date)}, ${formatDayDate(day.date)}`}
         >
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="font-bold text-base capitalize">{formatDayName(day.date)}</p>
-                    <p className="text-gray-400 text-xs">{formatDayDate(day.date)}</p>
+                    <p className="font-bold text-base text-left capitalize">{formatDayName(day.date)}</p>
+                    <p className="text-gray-400 text-xs text-left">{formatDayDate(day.date)}</p>
                 </div>
                 {day.status === DayStatus.Holiday && <StarIcon className="w-5 h-5 text-yellow-400" />}
             </div>
@@ -59,7 +61,7 @@ const DayCard: React.FC<DayCardProps> = ({ day, onEdit, isToday }) => {
                     {day.status === DayStatus.Work ? `${hours.toFixed(1)}h` : '0h'}
                 </p>
             </div>
-        </div>
+        </button>
     );
 };
 

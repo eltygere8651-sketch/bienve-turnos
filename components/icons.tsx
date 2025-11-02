@@ -2,12 +2,19 @@ import React from 'react';
 
 export const LogoIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className || "w-8 h-8"}>
-        <path d="M8 2H16L19 7L12 22L5 7L8 2ZM12 8L9.5 4H8.5L12 5.5L15.5 4H14.5L12 8Z" fill="currentColor" />
-        <path d="M8 7.5H10.5V9.5H8V7.5Z" fill="#FBBF24" />
-        <path d="M8 8.5H10.5" stroke="#334155" strokeWidth="0.3" />
-        <path d="M9.25 7.5V8.5" stroke="#334155" strokeWidth="0.3" />
+      <path d="M15 5H9C6.79086 5 5 6.79086 5 9V15C5 17.2091 6.79086 19 9 19H15C17.2091 19 19 17.2091 19 15V9C19 6.79086 17.2091 5 15 5Z" fill="currentColor" />
+      <path d="M15 6H9C7.34315 6 6 7.34315 6 9V15C6 16.6569 7.34315 18 9 18H15C16.6569 18 18 16.6569 18 15V9C18 7.34315 16.6569 6 15 6Z" fill="url(#paint0_linear_1_2)" />
+      <path d="M10 9.5H14V11.5H12C11.4477 11.5 11 11.9477 11 12.5V14.5H10V9.5Z" fill="white" />
+      <circle cx="12.5" cy="8.5" r="1" fill="#FBBF24" />
+      <defs>
+        <linearGradient id="paint0_linear_1_2" x1="5" y1="5" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#DC2626" />
+          <stop offset="1" stopColor="#991B1B" />
+        </linearGradient>
+      </defs>
     </svg>
 );
+
 
 export const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>

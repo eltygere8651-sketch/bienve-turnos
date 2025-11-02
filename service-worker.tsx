@@ -5,11 +5,12 @@
 // This is a robust service worker for caching static assets.
 // It helps the app to load faster and work offline.
 
-const CACHE_NAME = 'bienve-app-cache-v2'; // Incremented version to clear old caches
+const CACHE_NAME = 'bienve-app-cache-v3'; // Incremented version to clear old caches
 const urlsToCache = [
   '/',
   '/index.html',
   '/index.tsx', // Cache the main script to enable offline functionality
+  '/logo.svg',  // Cache the new app icon
   'https://cdn.tailwindcss.com',
   // Cache all critical CDN assets from the importmap
   'https://aistudiocdn.com/react@^19.2.0',
@@ -53,8 +54,13 @@ sw.addEventListener('fetch', event => {
                 return fetch(event.request).then(
                     networkResponse => {
                         // Check if we received a valid response to cache.
-                        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-                            return networkResponse;
+                        // FIX: Allow caching of opaque responses from CDNs (like tailwindcss)
+                        if (!networkResponse || networkResponse.status !== 200) {
+                            if (networkResponse && networkResponse.type === 'opaque') {
+                                // It's an opaque response, let's cache it but we can't inspect it.
+                            } else {
+                                return networkResponse;
+                            }
                         }
 
                         // Clone the response because it's a stream and can only be consumed once.
@@ -68,7 +74,11 @@ sw.addEventListener('fetch', event => {
 
                         return networkResponse;
                     }
-                );
+                ).catch(error => {
+                    console.error('Fetching failed:', error);
+                    // You could return a custom offline page here if you want.
+                    throw error;
+                });
             })
     );
 });
