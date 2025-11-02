@@ -16,6 +16,8 @@ import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 
+type DriveSyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
 const App: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [schedule, setSchedule] = useState<Schedule>(() => {
@@ -48,6 +50,7 @@ const App: React.FC = () => {
     const [isDriveConnected, setIsDriveConnected] = useState(false);
     const [isDriveLoading, setIsDriveLoading] = useState(true);
     const [driveUser, setDriveUser] = useState<DriveUser | null>(null);
+    const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
 
     useEffect(() => {
         if ('Notification' in window) {
@@ -68,11 +71,19 @@ const App: React.FC = () => {
 
     }, []);
 
-    const debouncedSaveToDrive = useDebouncedCallback((newSchedule: Schedule) => {
+    const debouncedSaveToDrive = useDebouncedCallback(async (newSchedule: Schedule) => {
         if (isDriveConnected) {
-            driveService.saveSchedule(newSchedule).catch(e => console.error("Failed to save to Drive", e));
+            setDriveSyncStatus('syncing');
+            try {
+                await driveService.saveSchedule(newSchedule);
+                setDriveSyncStatus('success');
+                setTimeout(() => setDriveSyncStatus('idle'), 3000); // Reset after 3s
+            } catch (e) {
+                console.error("Failed to save to Drive", e);
+                setDriveSyncStatus('error');
+            }
         }
-    }, 2000); // Debounce by 2 seconds
+    }, 2000);
 
     useEffect(() => {
         try {
@@ -91,7 +102,7 @@ const App: React.FC = () => {
         if (!schedule[weekId]) {
             return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
         }
-        const scheduledDaysMap = new Map(schedule[weekId].map(d => [d.date.toDateString(), d]));
+        const scheduledDaysMap = new Map(schedule[weekId].map(d => [new Date(d.date).toDateString(), d]));
         return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
 
@@ -127,7 +138,7 @@ const App: React.FC = () => {
         setSchedule(prevSchedule => {
             const currentWeekData = prevSchedule[weekId] || weekDays;
             const newWeekDays = [...currentWeekData];
-            const dayIndex = newWeekDays.findIndex(d => d.date.toDateString() === updatedDay.date.toDateString());
+            const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toDateString() === updatedDay.date.toDateString());
             if (dayIndex !== -1) {
                 newWeekDays[dayIndex] = updatedDay;
             }
@@ -206,7 +217,7 @@ const App: React.FC = () => {
             const daysInMonth = getDaysInMonth(currentDate);
             const monthSchedule: Day[] = daysInMonth.map(date => {
                 const weekId = getWeekId(date);
-                const dayData = schedule[weekId]?.find(d => d.date.toDateString() === date.toDateString());
+                const dayData = schedule[weekId]?.find(d => new Date(d.date).toDateString() === date.toDateString());
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
 
@@ -269,6 +280,12 @@ const App: React.FC = () => {
             setIsDriveLoading(false);
         }
     };
+    
+    const handleRetrySync = () => {
+        // We pass the current schedule to the debounced function.
+        // It will trigger an immediate execution because of the nature of this debounced implementation.
+        debouncedSaveToDrive(schedule);
+    };
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
@@ -289,6 +306,8 @@ const App: React.FC = () => {
                 onSignIn={handleSignIn}
                 onSignOut={handleSignOut}
                 onForceSync={handleLoadFromDrive}
+                driveSyncStatus={driveSyncStatus}
+                onRetrySync={handleRetrySync}
             />
             <main className="flex-grow p-4 md:p-6 lg:p-8">
                 <WeekView 

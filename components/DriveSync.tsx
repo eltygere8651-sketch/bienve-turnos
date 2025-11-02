@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DriveUser } from '../types';
-import { GoogleDriveIcon } from './icons';
+import { GoogleDriveIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon } from './icons';
 
 interface DriveSyncProps {
     driveUser: DriveUser | null;
@@ -9,9 +9,11 @@ interface DriveSyncProps {
     onSignIn: () => void;
     onSignOut: () => void;
     onForceSync: () => void;
+    driveSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
+    onRetrySync: () => void;
 }
 
-const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, onSignIn, onSignOut, onForceSync }) => {
+const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, onSignIn, onSignOut, onForceSync, driveSyncStatus, onRetrySync }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -24,6 +26,24 @@ const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDr
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const getSyncIcon = () => {
+        switch (driveSyncStatus) {
+            case 'syncing':
+                return <ArrowPathIcon className="w-5 h-5 text-blue-400 animate-spin" title="Sincronizando..."/>;
+            case 'success':
+                return <CheckCircleIcon className="w-5 h-5 text-green-400" title="Guardado en Drive"/>;
+            case 'error':
+                return (
+                    <button onClick={onRetrySync} title="Error de sincronización. Clic para reintentar.">
+                        <ExclamationCircleIcon className="w-5 h-5 text-red-400" />
+                    </button>
+                );
+            default:
+                return <div className="w-5 h-5" />; // Placeholder for alignment
+        }
+    };
+
 
     if (isDriveLoading) {
         return (
@@ -47,37 +67,42 @@ const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDr
     }
 
     return (
-        <div className="relative" ref={menuRef}>
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
-                <img
-                    className="h-8 w-8 rounded-full"
-                    src={driveUser?.picture}
-                    alt="User avatar"
-                    title={`Conectado como ${driveUser?.name}`}
-                />
-            </button>
-            {isMenuOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-gray-700 ring-1 ring-black ring-opacity-5 z-20">
-                    <div className="px-4 py-2 text-sm text-gray-300 border-b border-gray-600">
-                        <p className="font-semibold truncate">{driveUser?.name}</p>
-                        <p className="text-xs truncate">{driveUser?.email}</p>
+        <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-center w-5 h-5">
+                {getSyncIcon()}
+            </div>
+            <div className="relative" ref={menuRef}>
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
+                    <img
+                        className="h-8 w-8 rounded-full"
+                        src={driveUser?.picture}
+                        alt="User avatar"
+                        title={`Conectado como ${driveUser?.name}`}
+                    />
+                </button>
+                {isMenuOpen && (
+                    <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-gray-700 ring-1 ring-black ring-opacity-5 z-20">
+                        <div className="px-4 py-2 text-sm text-gray-300 border-b border-gray-600">
+                            <p className="font-semibold truncate">{driveUser?.name}</p>
+                            <p className="text-xs truncate">{driveUser?.email}</p>
+                        </div>
+                        <a
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); onForceSync(); setIsMenuOpen(false); }}
+                            className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                        >
+                            Sincronizar ahora
+                        </a>
+                        <a
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); onSignOut(); setIsMenuOpen(false); }}
+                            className="block px-4 py-2 text-sm text-red-400 hover:bg-gray-600"
+                        >
+                            Desconectar
+                        </a>
                     </div>
-                    <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); onForceSync(); setIsMenuOpen(false); }}
-                        className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
-                    >
-                        Sincronizar ahora
-                    </a>
-                    <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); onSignOut(); setIsMenuOpen(false); }}
-                        className="block px-4 py-2 text-sm text-red-400 hover:bg-gray-600"
-                    >
-                        Desconectar
-                    </a>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };

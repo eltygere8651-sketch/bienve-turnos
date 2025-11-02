@@ -1,6 +1,7 @@
+import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
 import { getWeekTitle, getMonthTitle } from '../utils/dateUtils';
-import { LOGO_SVG_STRING } from '../constants';
+import { LOGO_SVG_STRING_PDF } from '../constants';
 
 interface WeekPdfData {
     weekDays: Day[];
@@ -15,36 +16,6 @@ interface MonthPdfData {
     totalHours: number;
     overtimeHours: number;
 }
-
-/**
- * Dynamically loads the jspdf library if it's not already available.
- * This prevents race conditions and lazy-loads the library on demand.
- * @returns A promise that resolves with the jsPDF constructor.
- */
-const getJsPdf = async (): Promise<any> => {
-    // Check if it's already loaded by the UMD script
-    if ((window as any).jspdf) {
-        return (window as any).jspdf.jsPDF;
-    }
-    
-    try {
-        // Dynamically import the module. The importmap resolves 'jspdf'.
-        await import('jspdf');
-        
-        // After import, the UMD module should have attached itself to the window object.
-        if ((window as any).jspdf) {
-            return (window as any).jspdf.jsPDF;
-        } else {
-            // This is a fallback in case the module loads but doesn't expose the global
-            throw new Error('jsPDF library loaded but not attached to the window object.');
-        }
-    } catch (error) {
-        console.error("Failed to load jsPDF library dynamically:", error);
-        // Provide a user-friendly error message.
-        throw new Error("La librería para generar PDF no se ha podido cargar. Revisa tu conexión a internet e inténtalo de nuevo.");
-    }
-};
-
 
 /**
  * Converts an SVG string to a PNG data URL using a canvas.
@@ -86,10 +57,9 @@ export const svgToPngDataUrl = (svgString: string, width: number, height: number
     });
 };
 
-const addHeader = async (doc: any) => {
-    const logoSvgForPdf = LOGO_SVG_STRING.replace('fill="white"', 'fill="#334155"'); // Replace white with dark slate gray
+const addHeader = async (doc: jsPDF) => {
     try {
-        const pdfLogoPngUrl = await svgToPngDataUrl(logoSvgForPdf, 100, 100);
+        const pdfLogoPngUrl = await svgToPngDataUrl(LOGO_SVG_STRING_PDF, 100, 100);
         doc.addImage(pdfLogoPngUrl, 'PNG', 15, 10, 20, 20);
     } catch (error) {
         console.error("Failed to generate logo for PDF:", error);
@@ -103,7 +73,6 @@ const addHeader = async (doc: any) => {
 export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     const { weekDays, currentDate, totalHours, overtimeHours } = data;
     
-    const jsPDF = await getJsPdf();
     const doc = new jsPDF();
     
     await addHeader(doc);
@@ -156,7 +125,6 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
 export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     const { monthDays, currentDate, totalHours, overtimeHours } = data;
 
-    const jsPDF = await getJsPdf();
     const doc = new jsPDF('p', 'mm', 'a4');
 
     await addHeader(doc);

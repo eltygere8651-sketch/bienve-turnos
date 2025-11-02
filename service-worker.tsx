@@ -1,22 +1,18 @@
 // FIX: Add a triple-slash directive to include the 'webworker' library,
 // which defines global types for service workers like `ServiceWorkerGlobalScope`.
 /// <reference lib="webworker" />
+// FIX: Removed unnecessary reference to 'vite/client' types, which are not available in the service worker scope.
 
 // This is a robust service worker for caching static assets.
 // It helps the app to load faster and work offline.
 
-const CACHE_NAME = 'bienve-app-cache-v3'; // Incremented version to clear old caches
+const CACHE_NAME = 'bienve-app-cache-v4'; // Incremented version to clear old caches
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json', // Cache the PWA manifest
-  '/index.tsx', // Cache the main script to enable offline functionality
   '/logo.svg',  // Cache the new app icon
-  'https://cdn.tailwindcss.com',
-  // Cache all critical CDN assets from the importmap
-  'https://aistudiocdn.com/react@^19.2.0',
-  'https://aistudiocdn.com/react-dom@^19.2.0',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+  'https://cdn.tailwindcss.com'
 ];
 
 // Cast self to the ServiceWorkerGlobalScope type to access service worker events
@@ -55,12 +51,8 @@ sw.addEventListener('fetch', event => {
                     networkResponse => {
                         // Check if we received a valid response to cache.
                         // FIX: Allow caching of opaque responses from CDNs (like tailwindcss)
-                        if (!networkResponse || networkResponse.status !== 200) {
-                            if (networkResponse && networkResponse.type === 'opaque') {
-                                // It's an opaque response, let's cache it but we can't inspect it.
-                            } else {
-                                return networkResponse;
-                            }
+                        if (!networkResponse || (networkResponse.status !== 200 && networkResponse.type !== 'opaque')) {
+                            return networkResponse;
                         }
 
                         // Clone the response because it's a stream and can only be consumed once.

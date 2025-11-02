@@ -2,16 +2,19 @@ import React from 'react';
 
 export const LogoIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className || "w-8 h-8"}>
-      <path d="M15 5H9C6.79086 5 5 6.79086 5 9V15C5 17.2091 6.79086 19 9 19H15C17.2091 19 19 17.2091 19 15V9C19 6.79086 17.2091 5 15 5Z" fill="currentColor" />
-      <path d="M15 6H9C7.34315 6 6 7.34315 6 9V15C6 16.6569 7.34315 18 9 18H15C16.6569 18 18 16.6569 18 15V9C18 7.34315 16.6569 6 15 6Z" fill="url(#paint0_linear_1_2)" />
-      <path d="M10 9.5H14V11.5H12C11.4477 11.5 11 11.9477 11 12.5V14.5H10V9.5Z" fill="white" />
-      <circle cx="12.5" cy="8.5" r="1" fill="#FBBF24" />
-      <defs>
-        <linearGradient id="paint0_linear_1_2" x1="5" y1="5" x2="19" y2="19" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#DC2626" />
-          <stop offset="1" stopColor="#991B1B" />
-        </linearGradient>
-      </defs>
+        <defs>
+            <linearGradient id="paint0_linear_1_2" x1="6" y1="3" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#DC2626"/>
+                <stop offset="1" stopColor="#991B1B"/>
+            </linearGradient>
+        </defs>
+        {/* The B Letter */}
+        <path d="M13.5 11.5C15.7091 11.5 17.5 9.70914 17.5 7.5C17.5 5.29086 15.7091 3.5 13.5 3.5H8.5V11.5H13.5Z" fill="url(#paint0_linear_1_2)"/>
+        <path d="M14.5 18.5C17.2614 18.5 19.5 16.2614 19.5 13.5C19.5 10.7386 17.2614 8.5 14.5 8.5H8.5V18.5H14.5Z" fill="url(#paint0_linear_1_2)"/>
+        {/* The Tray */}
+        <path d="M4 20.5C4 19.9477 4.44772 19.5 5 19.5H19C19.5523 19.5 20 19.9477 20 20.5V20.5C20 21.0523 19.5523 21.5 19 21.5H5C4.44772 21.5 4 21.0523 4 20.5V20.5Z" fill="#B91C1C"/>
+        {/* Waiter Silhouette */}
+        <path d="M13.5,11c-0.55,0-1,0.45-1,1s0.45,1,1,1s1-0.45,1-1S14.05,11,13.5,11z M12,17.5v-4h3v4H12z M15,14.8h2.5v0.5H15v-0.5z" fill="black"/>
     </svg>
 );
 
@@ -92,5 +95,23 @@ export const Cog6ToothIcon: React.FC<{ className?: string }> = ({ className }) =
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.242 1.417l-1.07 1.07a.983.983 0 000 1.592l1.07 1.07a1.125 1.125 0 01.242 1.417l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.217-.456a1.125 1.125 0 00-1.075.124.987.987 0 00-.22.127c-.331.183-.581.495-.645.87l-.213 1.281c-.09.543-.56.94-1.11.94h-2.593c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a.987.987 0 00-.22-.127c-.354-.133-.75-.072-1.075.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.242-1.417l1.07-1.07a.983.983 0 000-1.592l-1.07-1.07a1.125 1.125 0 01-.242-1.417l1.296-2.247a1.125 1.125 0 011.37.49l1.217.456c.354.133.751.072 1.075-.124.073-.044.146-.087.22-.127.332-.183.582-.495.645-.87l.213-1.281z" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
+export const CheckCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
+export const ExclamationCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+    </svg>
+);
+
+export const ArrowPathIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-4.991-2.691L15.023 9.348m-11.023 0L1.985 19.644" />
     </svg>
 );

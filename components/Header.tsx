@@ -20,6 +20,8 @@ interface HeaderProps {
     onSignIn: () => void;
     onSignOut: () => void;
     onForceSync: () => void;
+    driveSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
+    onRetrySync: () => void;
 }
 
 const Header: React.FC<HeaderProps> = (props) => {
