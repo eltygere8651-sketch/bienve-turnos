@@ -1,4 +1,3 @@
-import 'jspdf';
 import { Day, DayStatus } from '../types';
 import { getWeekTitle, getMonthTitle } from '../utils/dateUtils';
 import { LOGO_SVG_STRING } from '../constants';
@@ -16,6 +15,35 @@ interface MonthPdfData {
     totalHours: number;
     overtimeHours: number;
 }
+
+/**
+ * Dynamically loads the jspdf library if it's not already available.
+ * This prevents race conditions and lazy-loads the library on demand.
+ * @returns A promise that resolves with the jsPDF constructor.
+ */
+const getJsPdf = async (): Promise<any> => {
+    // Check if it's already loaded by the UMD script
+    if ((window as any).jspdf) {
+        return (window as any).jspdf.jsPDF;
+    }
+    
+    try {
+        // Dynamically import the module. The importmap resolves 'jspdf'.
+        await import('jspdf');
+        
+        // After import, the UMD module should have attached itself to the window object.
+        if ((window as any).jspdf) {
+            return (window as any).jspdf.jsPDF;
+        } else {
+            // This is a fallback in case the module loads but doesn't expose the global
+            throw new Error('jsPDF library loaded but not attached to the window object.');
+        }
+    } catch (error) {
+        console.error("Failed to load jsPDF library dynamically:", error);
+        // Provide a user-friendly error message.
+        throw new Error("La librería para generar PDF no se ha podido cargar. Revisa tu conexión a internet e inténtalo de nuevo.");
+    }
+};
 
 
 /**
@@ -75,12 +103,7 @@ const addHeader = async (doc: any) => {
 export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     const { weekDays, currentDate, totalHours, overtimeHours } = data;
     
-    if (!(window as any).jspdf) {
-        console.error("jsPDF library not loaded. The download cannot proceed.");
-        throw new Error("La librería para generar PDF no se ha podido cargar. Revisa tu conexión a internet e inténtalo de nuevo.");
-    }
-
-    const { jsPDF } = (window as any).jspdf;
+    const jsPDF = await getJsPdf();
     const doc = new jsPDF();
     
     await addHeader(doc);
@@ -133,11 +156,7 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
 export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     const { monthDays, currentDate, totalHours, overtimeHours } = data;
 
-    if (!(window as any).jspdf) {
-        throw new Error("La librería para generar PDF no se ha podido cargar.");
-    }
-
-    const { jsPDF } = (window as any).jspdf;
+    const jsPDF = await getJsPdf();
     const doc = new jsPDF('p', 'mm', 'a4');
 
     await addHeader(doc);

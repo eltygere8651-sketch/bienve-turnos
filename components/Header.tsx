@@ -1,5 +1,7 @@
 import React, { useRef } from 'react';
 import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, BellIcon, BellSlashIcon, CalendarDownloadIcon } from './icons';
+import { DriveUser } from '../types';
+import DriveSync from './DriveSync';
 
 interface HeaderProps {
     currentWeekTitle: string;
@@ -11,22 +13,32 @@ interface HeaderProps {
     notificationStatus: NotificationPermission;
     onDownloadMonth: () => void;
     isDownloadingMonth: boolean;
+    isDriveConfigured: boolean;
+    driveUser: DriveUser | null;
+    isDriveConnected: boolean;
+    isDriveLoading: boolean;
+    onSignIn: () => void;
+    onSignOut: () => void;
+    onForceSync: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onGoToToday, onDateChange, onRequestPermission, notificationStatus, onDownloadMonth, isDownloadingMonth }) => {
+const Header: React.FC<HeaderProps> = (props) => {
+    const { 
+        currentWeekTitle, onPrevWeek, onNextWeek, onGoToToday, onDateChange, 
+        onRequestPermission, notificationStatus, onDownloadMonth, isDownloadingMonth,
+        isDriveConfigured,
+        ...driveProps 
+    } = props;
     
     const dateInputRef = useRef<HTMLInputElement>(null);
 
     const handleWeekTitleClick = () => {
-        // FIX: Corrected a typo from `dateInput_current` to `dateInputRef.current` to properly access the ref.
         dateInputRef.current?.showPicker();
     };
 
     const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const dateString = e.target.value;
         if (dateString) {
-            // The value from input type=date is 'YYYY-MM-DD'.
-            // new Date() will parse this in local time, which is correct.
             onDateChange(new Date(dateString));
         }
     };
@@ -64,6 +76,7 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                     </h1>
                 </div>
                 <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-4">
+                    {isDriveConfigured && <DriveSync {...driveProps} />}
                     {getNotificationButton()}
                      <button 
                         onClick={onDownloadMonth} 

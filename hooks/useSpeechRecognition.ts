@@ -1,83 +1,73 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { getShiftFromAudio } from '../services/geminiService';
 
-// Polyfill for browsers that use webkitSpeechRecognition
-// FIX: Cast `window` to `any` to access non-standard browser APIs `SpeechRecognition` and `webkitSpeechRecognition`.
-const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+interface UseSpeechRecognitionProps {
+    onTranscript: (transcript: string) => void;
+    onError: (error: string) => void;
+}
 
-export const useSpeechRecognition = () => {
+export const useSpeechRecognition = ({ onTranscript, onError }: UseSpeechRecognitionProps) => {
     const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState('');
-    const [error, setError] = useState<string | null>(null);
-    // FIX: Change the type of the ref to `any` to resolve a name collision. The `SpeechRecognition` constant
-    // holds the constructor, while the instance type also happens to be named `SpeechRecognition`, causing an error.
-    const recognitionRef = useRef<any | null>(null);
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
 
-    useEffect(() => {
-        if (!SpeechRecognition) {
-            setError('Speech recognition is not supported in this browser.');
+    const stopListening = useCallback(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+    }, []);
+
+    const startListening = useCallback(async () => {
+        if (isListening || isTranscribing) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            onError('El reconocimiento de voz no es soportado por este navegador.');
             return;
         }
 
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.lang = 'es-ES';
-        recognition.interimResults = false;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setIsListening(true);
+            audioChunksRef.current = [];
 
-        recognition.onresult = (event: any) => {
-            const currentTranscript = event.results[0][0].transcript;
-            setTranscript(currentTranscript);
-        };
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
 
-        recognition.onerror = (event: any) => {
-            console.error('Speech recognition error:', event.error);
-            let friendlyError = `Error de reconocimiento: ${event.error}`;
-            if (event.error === 'no-speech') {
-                friendlyError = 'No se ha detectado voz. Inténtalo de nuevo.';
-            } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                friendlyError = 'Permiso para el micrófono denegado. Revísalo en los ajustes del navegador.';
-            } else if (event.error === 'audio-capture') {
-                friendlyError = 'No se pudo acceder al micrófono. Asegúrate de que no está siendo usado por otra aplicación.';
-            }
-            setError(friendlyError);
-            setIsListening(false);
-        };
+            recorder.ondataavailable = (event) => {
+                audioChunksRef.current.push(event.data);
+            };
 
-        recognition.onend = () => {
-            setIsListening(false);
-        };
-        
-        recognitionRef.current = recognition;
-
-    }, []);
-
-    const startListening = useCallback(() => {
-        if (recognitionRef.current && !isListening) {
-            setTranscript('');
-            setError(null);
-            try {
-                recognitionRef.current.start();
-                setIsListening(true);
-            } catch (e) {
-                console.error("Could not start recognition:", e);
-                setError("No se pudo iniciar el reconocimiento. ¿Está el micrófono conectado?");
+            recorder.onstop = async () => {
                 setIsListening(false);
-            }
-        }
-    }, [isListening]);
+                setIsTranscribing(true);
 
-    const stopListening = useCallback(() => {
-        if (recognitionRef.current && isListening) {
-            recognitionRef.current.stop();
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                
+                try {
+                    const transcript = await getShiftFromAudio(audioBlob);
+                    onTranscript(transcript);
+                } catch (error) {
+                    onError(error instanceof Error ? error.message : 'Un error desconocido ocurrió.');
+                } finally {
+                    setIsTranscribing(false);
+                    // Clean up stream
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            };
+
+            recorder.start();
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            onError('No se pudo acceder al micrófono. Por favor, comprueba los permisos.');
             setIsListening(false);
         }
-    }, [isListening]);
+    }, [isListening, isTranscribing, onError, onTranscript]);
 
     return {
         isListening,
-        transcript,
-        error,
+        isTranscribing,
         startListening,
         stopListening,
-        hasRecognitionSupport: !!SpeechRecognition,
     };
 };

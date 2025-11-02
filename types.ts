@@ -14,3 +14,9 @@ export interface Day {
 export interface Schedule {
   [weekId: string]: Day[]; // weekId is "YYYY-WW"
 }
+
+export interface DriveUser {
+    name: string;
+    email: string;
+    picture: string;
+}

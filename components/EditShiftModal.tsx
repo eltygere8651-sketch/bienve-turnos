@@ -4,6 +4,7 @@ import { formatDayName, formatDayDate } from '../utils/dateUtils';
 import { Cog6ToothIcon } from './icons';
 import { ShiftTemplate } from '../hooks/useShiftTemplates';
 
+
 interface EditShiftModalProps {
     day: Day;
     onClose: () => void;
@@ -15,7 +16,7 @@ interface EditShiftModalProps {
 const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, templates, onManageTemplates }) => {
     const [shift, setShift] = useState(day.shift);
     const [status, setStatus] = useState(day.status);
-
+    
     const handleSave = () => {
         onSave({ ...day, shift: status === DayStatus.Work ? shift : '', status });
     };
@@ -53,7 +54,7 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                                     type="text"
                                     value={shift}
                                     onChange={(e) => setShift(e.target.value)}
-                                    placeholder="Introduce el turno manualmente..."
+                                    placeholder="Introduce el turno"
                                     className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
                                 />
                             </div>

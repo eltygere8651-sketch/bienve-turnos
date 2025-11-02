@@ -1,69 +1,61 @@
 import { GoogleGenAI } from "@google/genai";
 
-export const parseShiftWithAI = async (text: string): Promise<string> => {
-    const API_KEY = process.env.API_KEY;
+const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64data = (reader.result as string).split(',')[1];
+            resolve(base64data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
 
-    if (!API_KEY) {
-        // Ahora este error solo ocurrirá si se intenta usar la función de voz,
-        // no al cargar la aplicación.
-        console.error("La clave de API de Gemini no está configurada en el entorno. Por favor, añádela en Vercel.");
-        throw new Error("La clave de API no está configurada.");
+export const getShiftFromAudio = async (audioBlob: Blob): Promise<string> => {
+    if (!process.env.API_KEY) {
+        throw new Error("API key for Gemini is not configured.");
     }
-
-    // Inicializa el cliente de la IA justo a tiempo (Just-In-Time)
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-    if (!text) {
-        return "";
-    }
-
-    const systemInstruction = `
-### TAREA
-Eres un asistente experto para un camarero que registra sus horas. Tu única tarea es convertir una descripción hablada de un turno de trabajo en un formato de texto estandarizado.
-
-### FORMATO
-- Turno único: \`HH-HH\` (ej: \`10-18\`)
-- Turno partido: \`HH-HH HH-HH\` (ej: \`12-16 20-23\`)
-- Horas decimales: Usa un punto (ej: \`10.5\` para las diez y media).
-- Cierre: Usa 'C' para el cierre, que equivale a las 24:00 (ej: \`20-C\`).
-
-### REGLAS
-1.  Tu respuesta debe contener ÚNICAMENTE el texto del turno en el formato especificado.
-2.  NO incluyas NUNCA explicaciones, saludos, o texto adicional como "Aquí tienes el turno:".
-3.  Si la entrada no describe un turno (ej: "hoy libro", "no trabajo") o no la entiendes, devuelve un string vacío \`""\`.
-4.  Interpreta las horas de la tarde/noche en formato 24h (ej: "dos de la tarde" es 14, "ocho de la noche" es 20).
-
-### EJEMPLOS
-- "Trabajé de doce a cuatro y de ocho a cierre" -> "12-16 20-C"
-- "Mi turno fue de dos de la tarde a once de la noche" -> "14-23"
-- "De 12 a 16 y de 20 a 23" -> "12-16 20-23"
-- "De ocho de la tarde a cierre" -> "20-C"
-- "Hice de diez a dos y media" -> "10-14.5"
-- "Hoy no trabajo" -> ""
-- "Libré" -> ""
-`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     try {
+        const audioData = await blobToBase64(audioBlob);
+        
+        const audioPart = {
+            inlineData: {
+                mimeType: audioBlob.type,
+                data: audioData,
+            },
+        };
+
+        const textPart = {
+            text: `
+                Eres un asistente para una app de horarios de trabajo. 
+                Tu tarea es escuchar el audio, interpretar el horario de trabajo y devolverlo en un formato numérico estricto.
+                - El formato debe ser 'HH-HH' para un turno simple o 'HH-HH HH-HH' para un turno partido.
+                - 'Cierre' o 'C' siempre se traduce como 'C'.
+                - Si el usuario dice "de ocho a cuatro", interpreta las 8AM y las 4PM.
+                - Si dice "de diez de la noche a seis de la mañana", interpreta 22-06.
+                - Asume un reloj de 24 horas para las tardes a menos que se especifique mañana. 'Las 8' por la tarde son las 20.
+                - Ignora cualquier otra palabra que no sea parte del horario.
+                - No respondas con frases, solo con el formato de horario.
+
+                Ejemplos:
+                - Audio: "de diez a dos y de ocho a once" -> Respuesta: "10-14 20-23"
+                - Audio: "turno partido de doce a cuatro y de ocho a cierre" -> Respuesta: "12-16 20-C"
+                - Audio: "mañana de ocho a cuatro de la tarde" -> Respuesta: "08-16"
+                - Audio: "hoy libro" -> Respuesta: ""
+            `,
+        };
+
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: text,
-            config: {
-                systemInstruction: systemInstruction,
-                temperature: 0,
-            }
+            model: 'gemini-2.5-flash',
+            contents: { parts: [textPart, audioPart] },
         });
 
-        // Defensive check: The API response might be blocked or empty,
-        // leading to `response.text` being undefined.
-        if (!response || !response.text) {
-            console.warn("AI response is empty or invalid, possibly due to content filtering.");
-            return "";
-        }
-
         return response.text.trim();
-       
     } catch (error) {
-        console.error("Error parsing shift with AI:", error);
-        throw new Error("Failed to communicate with AI service.");
+        console.error("Error processing audio with Gemini:", error);
+        throw new Error("No se pudo interpretar el audio. Por favor, inténtalo de nuevo.");
     }
 };

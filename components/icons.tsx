@@ -15,6 +15,17 @@ export const LogoIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+export const GoogleDriveIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className || "w-6 h-6"}>
+        <path d="M19.45 7.72l-6.53-11.31c-.16-.27-.46-.44-.78-.44s-.61.17-.78.44L4.83 7.72c-.18.31-.18.69 0 1l3.35 5.8-3.35 5.8c-.18.31-.18.69 0 1l6.53 11.31c.16.27.46.44.78.44s.61-.17.78-.44l6.53-11.31c.18-.31.18-.69 0-1l-3.35-5.8 3.35-5.8c.18-.31.18-.69 0-1z" fill="#4285F4"/>
+        <path d="M12.23 11.31l-3.35-5.8-3.1 5.37 6.45.43z" fill="#1E88E5"/>
+        <path d="M21.17 8.72l-4.82- .01-3.1 5.37 7.92-.01z" fill="#FFC107"/>
+        <path d="M7.88 14.51l3.35 5.8 3.1-5.37-6.45-.43z" fill="#1E88E5"/>
+        <path d="M16.35 14.51l-7.92.01 3.1 5.37 4.82-.01z" fill="#FFC107"/>
+        <path d="M8.01 12.01l-1.63-2.82-1.55 2.68 3.18.14z" fill="#2196F3"/>
+        <path d="M17.62 12.01l-3.18.14 1.55 2.68 1.63-2.82z" fill="#2196F3"/>
+    </svg>
+);
 
 export const DownloadIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>

@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import 'jspdf'; // Import for side-effect to load the library
-import { Day, Schedule, DayStatus } from './types';
+import { Day, Schedule, DayStatus, DriveUser } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
 import * as notificationService from './services/notificationService';
+import * as driveService from './services/googleDriveService';
 import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, svgToPngDataUrl } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
@@ -12,6 +12,7 @@ import EditShiftModal from './components/EditShiftModal';
 import { useShiftTemplates } from './hooks/useShiftTemplates';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
 import { LOGO_SVG_STRING } from './constants';
+import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 
@@ -22,7 +23,6 @@ const App: React.FC = () => {
             const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             if (savedSchedule) {
                 const parsed = JSON.parse(savedSchedule);
-                // Dates are stored as strings in JSON, so we need to convert them back to Date objects
                 Object.keys(parsed).forEach(weekId => {
                     parsed[weekId] = parsed[weekId].map((day: any) => ({
                         ...day,
@@ -44,23 +44,44 @@ const App: React.FC = () => {
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
 
+    // Google Drive State
+    const [isDriveConnected, setIsDriveConnected] = useState(false);
+    const [isDriveLoading, setIsDriveLoading] = useState(true);
+    const [driveUser, setDriveUser] = useState<DriveUser | null>(null);
 
     useEffect(() => {
         if ('Notification' in window) {
             setNotificationPermission(Notification.permission);
         }
-        // Generate PNG version of the logo for notifications
         svgToPngDataUrl(LOGO_SVG_STRING, 100, 100).then(setLogoPngUrl).catch(console.error);
+        
+        // Initialize Google Drive Service only if it's configured
+        if (driveService.isDriveConfigured) {
+            driveService.initClient((tokenResponse) => {
+                setIsDriveConnected(true);
+                setDriveUser(driveService.getProfile());
+                handleLoadFromDrive();
+            }).finally(() => setIsDriveLoading(false));
+        } else {
+            setIsDriveLoading(false);
+        }
+
     }, []);
 
-    // Effect for saving schedule to localStorage whenever it changes
+    const debouncedSaveToDrive = useDebouncedCallback((newSchedule: Schedule) => {
+        if (isDriveConnected) {
+            driveService.saveSchedule(newSchedule).catch(e => console.error("Failed to save to Drive", e));
+        }
+    }, 2000); // Debounce by 2 seconds
+
     useEffect(() => {
         try {
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
+            debouncedSaveToDrive(schedule);
         } catch (error) {
             console.error("Failed to save schedule to localStorage", error);
         }
-    }, [schedule]);
+    }, [schedule, debouncedSaveToDrive]);
 
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
@@ -70,7 +91,6 @@ const App: React.FC = () => {
         if (!schedule[weekId]) {
             return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
         }
-        // Ensure the week has 7 days, even if loaded data is partial
         const scheduledDaysMap = new Map(schedule[weekId].map(d => [d.date.toDateString(), d]));
         return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
@@ -220,6 +240,36 @@ const App: React.FC = () => {
         setNotificationPermission(permission);
     };
 
+    const handleSignIn = () => {
+        setIsDriveLoading(true);
+        driveService.signIn(); // The callback in initClient will handle the rest
+    };
+
+    const handleSignOut = () => {
+        driveService.signOut();
+        setIsDriveConnected(false);
+        setDriveUser(null);
+    };
+
+    const handleLoadFromDrive = async () => {
+        setIsDriveLoading(true);
+        try {
+            const driveSchedule = await driveService.getSchedule();
+            if (driveSchedule) {
+                 if (window.confirm("Se encontró un horario en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales?")) {
+                    setSchedule(driveSchedule);
+                 }
+            } else {
+                alert("No se encontró ningún horario guardado en tu Google Drive. Se guardará uno nuevo la próxima vez que hagas un cambio.");
+            }
+        } catch (e) {
+            alert("Error al cargar los datos de Google Drive.");
+            console.error(e);
+        } finally {
+            setIsDriveLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
             <Header
@@ -232,6 +282,13 @@ const App: React.FC = () => {
                 notificationStatus={notificationPermission}
                 onDownloadMonth={handleDownloadMonth}
                 isDownloadingMonth={isDownloadingMonth}
+                isDriveConfigured={driveService.isDriveConfigured}
+                driveUser={driveUser}
+                isDriveConnected={isDriveConnected}
+                isDriveLoading={isDriveLoading}
+                onSignIn={handleSignIn}
+                onSignOut={handleSignOut}
+                onForceSync={handleLoadFromDrive}
             />
             <main className="flex-grow p-4 md:p-6 lg:p-8">
                 <WeekView 

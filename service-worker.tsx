@@ -9,6 +9,7 @@ const CACHE_NAME = 'bienve-app-cache-v3'; // Incremented version to clear old ca
 const urlsToCache = [
   '/',
   '/index.html',
+  '/manifest.json', // Cache the PWA manifest
   '/index.tsx', // Cache the main script to enable offline functionality
   '/logo.svg',  // Cache the new app icon
   'https://cdn.tailwindcss.com',
