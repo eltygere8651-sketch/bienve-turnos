@@ -15,7 +15,6 @@ const urlsToCache = [
   // Cache all critical CDN assets from the importmap
   'https://aistudiocdn.com/react@^19.2.0',
   'https://aistudiocdn.com/react-dom@^19.2.0',
-  'https://aistudiocdn.com/@google/genai@^1.28.0',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 

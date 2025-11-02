@@ -1,4 +1,3 @@
-
 // Helper to get the week number for a date
 const getWeekNumber = (d: Date): number => {
     d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -30,6 +29,19 @@ export const getWeekDays = (date: Date): Date[] => {
     return days;
 };
 
+export const getDaysInMonth = (date: Date): Date[] => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const days: Date[] = [];
+    const day = new Date(year, month, 1);
+
+    while (day.getMonth() === month) {
+        days.push(new Date(day));
+        day.setDate(day.getDate() + 1);
+    }
+    return days;
+};
+
 export const getWeekTitle = (date: Date): string => {
     const weekDays = getWeekDays(date);
     const firstDay = weekDays[0];
@@ -40,6 +52,10 @@ export const getWeekTitle = (date: Date): string => {
     const lastDayStr = lastDay.toLocaleDateString('es-ES', options);
 
     return `Semana del ${firstDayStr} al ${lastDayStr}`;
+};
+
+export const getMonthTitle = (date: Date): string => {
+    return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 };
 
 export const formatDayDate = (date: Date): string => {

@@ -1,7 +1,5 @@
 {
   "name": "Bienve App",
   "description": "Una aplicación inteligente para gestionar los horarios de trabajo semanales con la marca Bienve App, calcular las horas extraordinarias e introducir los turnos mediante voz o manualmente. Perfecta para el sector de la hostelería.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }

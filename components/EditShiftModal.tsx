@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Day, DayStatus } from '../types';
 import { formatDayName, formatDayDate } from '../utils/dateUtils';
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { parseShiftWithAI } from '../services/geminiService';
-import { MicrophoneIcon, Cog6ToothIcon } from './icons';
+import { Cog6ToothIcon } from './icons';
 import { ShiftTemplate } from '../hooks/useShiftTemplates';
 
 interface EditShiftModalProps {
@@ -17,31 +15,6 @@ interface EditShiftModalProps {
 const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, templates, onManageTemplates }) => {
     const [shift, setShift] = useState(day.shift);
     const [status, setStatus] = useState(day.status);
-    const [isProcessingAI, setIsProcessingAI] = useState(false);
-    const {
-        isListening,
-        transcript,
-        error,
-        startListening,
-        hasRecognitionSupport,
-    } = useSpeechRecognition();
-
-    useEffect(() => {
-        if (transcript) {
-            setIsProcessingAI(true);
-            parseShiftWithAI(transcript)
-                .then(parsedShift => {
-                    setShift(parsedShift);
-                })
-                .catch(err => {
-                    console.error(err);
-                    // Maybe show a toast notification to the user
-                })
-                .finally(() => {
-                    setIsProcessingAI(false);
-                });
-        }
-    }, [transcript]);
 
     const handleSave = () => {
         onSave({ ...day, shift: status === DayStatus.Work ? shift : '', status });
@@ -80,9 +53,8 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                                     type="text"
                                     value={shift}
                                     onChange={(e) => setShift(e.target.value)}
-                                    placeholder={isProcessingAI ? "Procesando voz..." : "Introduce el turno manualmente..."}
-                                    disabled={isProcessingAI}
-                                    className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition disabled:bg-gray-700 disabled:cursor-not-allowed"
+                                    placeholder="Introduce el turno manualmente..."
+                                    className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
                                 />
                             </div>
                             <div className="mt-4">
@@ -90,8 +62,7 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                                     <p className="text-sm font-medium text-gray-300">Acciones Rápidas</p>
                                     <button
                                         onClick={onManageTemplates}
-                                        disabled={isProcessingAI}
-                                        className="flex items-center space-x-1 text-sm text-red-400 hover:text-red-300 disabled:text-gray-500 disabled:cursor-not-allowed transition"
+                                        className="flex items-center space-x-1 text-sm text-red-400 hover:text-red-300 transition"
                                     >
                                         <Cog6ToothIcon className="w-4 h-4" />
                                         <span>Gestionar</span>
@@ -102,37 +73,18 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                                         <button 
                                             key={template.name}
                                             onClick={() => setShift(template.value)}
-                                            disabled={isProcessingAI}
-                                            className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded-full transition disabled:bg-gray-600 disabled:cursor-not-allowed"
+                                            className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded-full transition"
                                         >
                                             {template.name}
                                         </button>
                                     ))}
                                     <button 
                                         onClick={() => setShift('')}
-                                        disabled={isProcessingAI}
-                                        className="px-3 py-1 text-sm bg-gray-700 hover:bg-red-700 text-red-300 hover:text-white rounded-full transition border border-red-500/50 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:text-gray-400"
+                                        className="px-3 py-1 text-sm bg-gray-700 hover:bg-red-700 text-red-300 hover:text-white rounded-full transition border border-red-500/50"
                                     >
                                         Limpiar
                                     </button>
                                 </div>
-                            </div>
-                            <div className="mt-6 flex flex-col items-center">
-                                 {hasRecognitionSupport ? (
-                                     <button
-                                        onClick={startListening}
-                                        disabled={isListening || isProcessingAI}
-                                        className="flex items-center justify-center w-16 h-16 rounded-full bg-red-600 text-white hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-110"
-                                    >
-                                        <MicrophoneIcon className="w-8 h-8"/>
-                                     </button>
-                                 ) : (
-                                    <p className="text-sm text-yellow-500">La voz no es compatible en este navegador.</p>
-                                 )}
-                                 <p className="mt-2 text-sm text-gray-400 h-5">
-                                    {isListening ? 'Escuchando...' : isProcessingAI ? 'Procesando...' : 'Pulsa para hablar'}
-                                 </p>
-                                 {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
                             </div>
                        </div>
                     )}

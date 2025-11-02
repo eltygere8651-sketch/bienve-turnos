@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, BellIcon, BellSlashIcon } from './icons';
+import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, BellIcon, BellSlashIcon, CalendarDownloadIcon } from './icons';
 
 interface HeaderProps {
     currentWeekTitle: string;
@@ -9,9 +9,11 @@ interface HeaderProps {
     onDateChange: (date: Date) => void;
     onRequestPermission: () => void;
     notificationStatus: NotificationPermission;
+    onDownloadMonth: () => void;
+    isDownloadingMonth: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onGoToToday, onDateChange, onRequestPermission, notificationStatus }) => {
+const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onGoToToday, onDateChange, onRequestPermission, notificationStatus, onDownloadMonth, isDownloadingMonth }) => {
     
     const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +65,15 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                 </div>
                 <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-4">
                     {getNotificationButton()}
+                     <button 
+                        onClick={onDownloadMonth} 
+                        disabled={isDownloadingMonth}
+                        className="p-2 rounded-full bg-gray-700 hover:bg-red-600 transition-colors duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed" 
+                        aria-label="Descargar mes" 
+                        title="Descargar horario del mes"
+                    >
+                        {isDownloadingMonth ? <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div> : <CalendarDownloadIcon className="w-5 h-5" />}
+                    </button>
                     <button onClick={onGoToToday} className="p-2 rounded-full bg-gray-700 hover:bg-red-600 transition-colors duration-200" aria-label="Hoy" title="Ir a la semana actual">
                         <CalendarIcon className="w-5 h-5" />
                     </button>

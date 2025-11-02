@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import 'jspdf'; // Import for side-effect to load the library
 import { Day, Schedule, DayStatus } from './types';
-import { getWeekId, getWeekDays, getWeekTitle } from './utils/dateUtils';
+import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
 import * as notificationService from './services/notificationService';
-import { downloadScheduleAsPdf, svgToPngDataUrl } from './services/pdfService';
+import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, svgToPngDataUrl } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -41,6 +41,8 @@ const App: React.FC = () => {
     const [logoPngUrl, setLogoPngUrl] = useState<string>('');
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
 
 
     useEffect(() => {
@@ -161,13 +163,56 @@ const App: React.FC = () => {
         setCurrentDate(new Date());
     };
 
-    const handleDownload = () => {
-        downloadScheduleAsPdf({
-            weekDays,
-            currentDate,
-            totalHours,
-            overtimeHours
-        });
+    const handleDownload = async () => {
+        setIsDownloading(true);
+        try {
+            await downloadScheduleAsPdf({
+                weekDays,
+                currentDate,
+                totalHours,
+                overtimeHours
+            });
+        } catch (error) {
+            console.error("PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF.");
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+    
+    const handleDownloadMonth = async () => {
+        setIsDownloadingMonth(true);
+        try {
+            const daysInMonth = getDaysInMonth(currentDate);
+            const monthSchedule: Day[] = daysInMonth.map(date => {
+                const weekId = getWeekId(date);
+                const dayData = schedule[weekId]?.find(d => d.date.toDateString() === date.toDateString());
+                return dayData || { date, shift: '', status: DayStatus.Work };
+            });
+
+            const totalHoursMonth = monthSchedule.reduce((acc, day) => {
+                if (day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
+                }
+                return acc;
+            }, 0);
+
+            const overtimeThreshold = 40 * (daysInMonth.length / 7); // ~40h/week
+            const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
+
+            await downloadMonthScheduleAsPdf({
+                monthDays: monthSchedule,
+                currentDate,
+                totalHours: totalHoursMonth,
+                overtimeHours: overtimeHoursMonth
+            });
+
+        } catch (error) {
+            console.error("Monthly PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del mes.");
+        } finally {
+            setIsDownloadingMonth(false);
+        }
     };
 
     const handleRequestPermission = async () => {
@@ -185,6 +230,8 @@ const App: React.FC = () => {
                 onDateChange={setCurrentDate}
                 onRequestPermission={handleRequestPermission}
                 notificationStatus={notificationPermission}
+                onDownloadMonth={handleDownloadMonth}
+                isDownloadingMonth={isDownloadingMonth}
             />
             <main className="flex-grow p-4 md:p-6 lg:p-8">
                 <WeekView 
@@ -198,6 +245,7 @@ const App: React.FC = () => {
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
                 onDownload={handleDownload}
+                isDownloading={isDownloading}
             />
             {editingDay && (
                 <EditShiftModal
