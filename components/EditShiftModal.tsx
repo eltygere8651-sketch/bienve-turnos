@@ -4,7 +4,6 @@ import { formatDayName, formatDayDate } from '../utils/dateUtils';
 import { Cog6ToothIcon } from './icons';
 import { ShiftTemplate } from '../hooks/useShiftTemplates';
 
-
 interface EditShiftModalProps {
     day: Day;
     onClose: () => void;
@@ -48,16 +47,14 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                             <label htmlFor="shift-input" className="block text-sm font-medium text-gray-300 mb-2">
                                 Turno (ej: 12-16 20-C)
                             </label>
-                            <div className="relative">
-                                <input
-                                    id="shift-input"
-                                    type="text"
-                                    value={shift}
-                                    onChange={(e) => setShift(e.target.value)}
-                                    placeholder="Introduce el turno"
-                                    className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
-                                />
-                            </div>
+                            <input
+                                id="shift-input"
+                                type="text"
+                                value={shift}
+                                onChange={(e) => setShift(e.target.value)}
+                                placeholder="Introduce el turno"
+                                className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                            />
                             <div className="mt-4">
                                 <div className="flex justify-between items-center mb-2">
                                     <p className="text-sm font-medium text-gray-300">Acciones Rápidas</p>

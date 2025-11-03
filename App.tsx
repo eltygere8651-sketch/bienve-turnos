@@ -13,6 +13,7 @@ import { useShiftTemplates } from './hooks/useShiftTemplates';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
 import { LOGO_SVG_STRING } from './constants';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
+import ConfirmModal from './components/ConfirmModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 
@@ -45,6 +46,15 @@ const App: React.FC = () => {
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
+    
+    type DriveLoadConfirmationState = {
+        isOpen: true;
+        onConfirm: () => void;
+    } | {
+        isOpen: false;
+    };
+    const [driveLoadConfirmation, setDriveLoadConfirmation] = useState<DriveLoadConfirmationState>({ isOpen: false });
+
 
     // Google Drive State
     const [isDriveConnected, setIsDriveConnected] = useState(false);
@@ -263,15 +273,21 @@ const App: React.FC = () => {
     };
 
     const handleLoadFromDrive = async () => {
+        if (!isDriveConnected) return;
         setIsDriveLoading(true);
         try {
             const driveSchedule = await driveService.getSchedule();
             if (driveSchedule) {
-                 if (window.confirm("Se encontró un horario en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales?")) {
-                    setSchedule(driveSchedule);
-                 }
+                 setDriveLoadConfirmation({
+                    isOpen: true,
+                    onConfirm: () => {
+                        setSchedule(driveSchedule);
+                        setDriveLoadConfirmation({isOpen: false});
+                    }
+                 });
             } else {
-                alert("No se encontró ningún horario guardado en tu Google Drive. Se guardará uno nuevo la próxima vez que hagas un cambio.");
+                // Do not alert if no schedule is found, it's a normal case for new users.
+                // It can be annoying to see this alert every time.
             }
         } catch (e) {
             alert("Error al cargar los datos de Google Drive.");
@@ -282,8 +298,6 @@ const App: React.FC = () => {
     };
     
     const handleRetrySync = () => {
-        // We pass the current schedule to the debounced function.
-        // It will trigger an immediate execution because of the nature of this debounced implementation.
         debouncedSaveToDrive(schedule);
     };
 
@@ -340,6 +354,14 @@ const App: React.FC = () => {
                     onClose={() => setIsManagingTemplates(false)}
                 />
             )}
+            <ConfirmModal
+                isOpen={driveLoadConfirmation.isOpen}
+                title="Cargar desde Google Drive"
+                message="Se encontró un horario en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales? Esta acción no se puede deshacer."
+                confirmText="Cargar Horario"
+                onConfirm={driveLoadConfirmation.isOpen ? driveLoadConfirmation.onConfirm : () => {}}
+                onCancel={() => setDriveLoadConfirmation({ isOpen: false })}
+            />
         </div>
     );
 };
