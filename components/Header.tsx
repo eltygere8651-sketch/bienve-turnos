@@ -16,11 +16,14 @@ interface HeaderProps {
     onForceSync: () => void;
     driveSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
     onRetrySync: () => void;
+    driveInitError: string | null;
+    isDriveAvailable: boolean;
 }
 
 const Header: React.FC<HeaderProps> = (props) => {
     const { 
         currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick,
+        isDriveAvailable,
         ...driveProps 
     } = props;
     
@@ -58,7 +61,7 @@ const Header: React.FC<HeaderProps> = (props) => {
 
                 {/* --- Columna Derecha: Sincronización con Drive --- */}
                 <div className="flex items-center justify-end">
-                    <DriveSync {...driveProps} />
+                    {isDriveAvailable && <DriveSync {...driveProps} />}
                 </div>
             </div>
         </header>

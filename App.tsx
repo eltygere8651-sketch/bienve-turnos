@@ -58,7 +58,9 @@ const App: React.FC = () => {
     const [isDriveConnected, setIsDriveConnected] = useState(false);
     const [isDriveLoading, setIsDriveLoading] = useState(true);
     const [driveUser, setDriveUser] = useState<DriveUser | null>(null);
+    const [driveInitError, setDriveInitError] = useState<string | null>(null);
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
+    const [isDriveAvailable, setIsDriveAvailable] = useState(true);
 
     useEffect(() => {
         // Initialize Google Drive Service
@@ -66,7 +68,21 @@ const App: React.FC = () => {
             setIsDriveConnected(true);
             setDriveUser(driveService.getProfile());
             handleLoadFromDrive();
-        }).finally(() => setIsDriveLoading(false));
+        })
+        .then(success => {
+            // This handles the case where API keys are not configured.
+            // The service returns `false`, and we silently disable the feature.
+            if (!success) {
+                setIsDriveAvailable(false);
+            }
+        })
+        .catch(err => {
+            // This handles other init errors (e.g., script timeout), which we want to report to the user.
+            console.error("No se pudo inicializar el servicio de Google Drive:", err.message);
+            setDriveInitError(err.message);
+            setIsDriveAvailable(false); // Also disable the feature on other errors.
+        })
+        .finally(() => setIsDriveLoading(false));
     }, []);
 
     const debouncedSaveToDrive = useDebouncedCallback(async (newSchedule: Schedule) => {
@@ -202,8 +218,9 @@ const App: React.FC = () => {
     };
 
     const handleSignIn = () => {
-        setIsDriveLoading(true);
-        driveService.signIn(); // The callback in initClient will handle the rest
+        // By not setting `isDriveLoading`, we avoid a stuck UI if the user closes the popup.
+        // The loading state is handled inside `handleLoadFromDrive` after a successful sign-in.
+        driveService.signIn();
     };
 
     const handleSignOut = () => {
@@ -256,6 +273,8 @@ const App: React.FC = () => {
                 onForceSync={handleLoadFromDrive}
                 driveSyncStatus={driveSyncStatus}
                 onRetrySync={handleRetrySync}
+                driveInitError={driveInitError}
+                isDriveAvailable={isDriveAvailable}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 

@@ -6,6 +6,7 @@ interface DriveSyncProps {
     driveUser: DriveUser | null;
     isDriveConnected: boolean;
     isDriveLoading: boolean;
+    driveInitError: string | null;
     onSignIn: () => void;
     onSignOut: () => void;
     onForceSync: () => void;
@@ -13,7 +14,7 @@ interface DriveSyncProps {
     onRetrySync: () => void;
 }
 
-const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, onSignIn, onSignOut, onForceSync, driveSyncStatus, onRetrySync }) => {
+const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, driveInitError, onSignIn, onSignOut, onForceSync, driveSyncStatus, onRetrySync }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +45,14 @@ const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDr
         }
     };
 
+    if (driveInitError) {
+        return (
+            <div className="flex items-center space-x-2 text-sm text-yellow-500" title={driveInitError}>
+                <ExclamationCircleIcon className="w-5 h-5" />
+                <span className="hidden sm:inline">Drive no disponible</span>
+            </div>
+        );
+    }
 
     if (isDriveLoading) {
         return (

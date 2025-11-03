@@ -13,9 +13,11 @@ declare namespace google {
             interface TokenResponse {
                 access_token: string;
                 id_token: string; // This is the JWT
+                error?: any;
             }
 
             interface TokenClient {
+                callback?: (tokenResponse: TokenResponse) => void;
                 requestAccessToken(options?: { prompt: string }): void;
             }
 
@@ -74,56 +76,84 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 const FILENAME = 'bienve-app-schedule.json';
 
 let tokenClient: google.accounts.oauth2.TokenClient | null = null;
+let tokenRefreshPromise: Promise<google.accounts.oauth2.TokenResponse> | null = null;
+
 
 interface GapiFile {
     id: string;
     name: string;
 }
 
-/**
- * Initializes the Google API client and Google Identity Services client.
- * Handles token management and user authentication state.
- */
-export async function initClient(onTokenResponseCallback: (tokenResponse: google.accounts.oauth2.TokenResponse) => void) {
-    if (!GOOGLE_CLIENT_ID || !API_KEY) {
-        console.warn("Google Drive Sync is disabled because GOOGLE_CLIENT_ID and/or API_KEY are not configured in the environment.");
-        return;
-    }
+const waitForGoogleScripts = (timeout = 10000): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            clearInterval(interval);
+            reject(new Error("Los scripts de la API de Google no se cargaron a tiempo. Revisa tu conexión a internet o bloqueadores de anuncios."));
+        }, timeout);
 
-    await new Promise<void>((resolve) => {
         const interval = setInterval(() => {
             if (window.gapi && window.google) {
                 clearInterval(interval);
+                clearTimeout(timeoutId);
                 resolve();
             }
         }, 100);
     });
+};
 
-    await new Promise<void>((resolve, reject) => {
-        gapi.load('client', () => {
-            gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: [DISCOVERY_DOC],
-            }).then(resolve).catch(reject);
+
+/**
+ * Initializes the Google API client and Google Identity Services client.
+ * Handles token management and user authentication state.
+ */
+export async function initClient(onTokenResponseCallback: (tokenResponse: google.accounts.oauth2.TokenResponse) => void): Promise<boolean> {
+    if (!GOOGLE_CLIENT_ID || !API_KEY) {
+        // Instead of throwing, we just inform that the feature is disabled and return false.
+        // This prevents the app from showing an error when the feature is intentionally not configured.
+        console.log("Google Drive sync is disabled because API keys are not configured.");
+        return false;
+    }
+    
+    try {
+        await waitForGoogleScripts();
+
+        await new Promise<void>((resolve, reject) => {
+            gapi.load('client', () => {
+                gapi.client.init({
+                    apiKey: API_KEY,
+                    discoveryDocs: [DISCOVERY_DOC],
+                }).then(resolve).catch(err => {
+                     console.error("Error al inicializar el cliente GAPI:", err);
+                    reject(new Error("No se pudo inicializar el cliente de Google Drive."));
+                });
+            });
         });
-    });
 
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: SCOPES,
-        callback: (tokenResponse) => {
-            if (tokenResponse && tokenResponse.access_token) {
-                 gapi.client.setToken({ access_token: tokenResponse.access_token, id_token: tokenResponse.id_token });
-                 onTokenResponseCallback(tokenResponse);
-            }
-        },
-    });
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: SCOPES,
+            callback: (tokenResponse) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                     gapi.client.setToken({ access_token: tokenResponse.access_token, id_token: tokenResponse.id_token });
+                     onTokenResponseCallback(tokenResponse);
+                } else if (tokenResponse && tokenResponse.error) {
+                    console.error("Error de autenticación de Google:", tokenResponse);
+                }
+            },
+        });
+        return true; // Indicate success
+    } catch(error) {
+        console.error("Error durante la inicialización del servicio de Google Drive:", error);
+        throw error; // Propagate other errors to UI
+    }
 }
 
 export function signIn() {
     if (tokenClient) {
         // By not providing a prompt, the Google Identity Service will determine the best user experience.
         // It will only show a popup if the user is not signed in or has not previously granted consent.
+        // FIX: The `requestAccessToken` method should be called without arguments for default behavior,
+        // rather than with an empty object, which violates the type signature.
         tokenClient.requestAccessToken();
     }
 }
@@ -154,7 +184,59 @@ export function getProfile(): DriveUser | null {
     return null;
 }
 
-async function getFileId(): Promise<string | null> {
+function refreshToken(): Promise<google.accounts.oauth2.TokenResponse> {
+    if (tokenRefreshPromise) {
+        return tokenRefreshPromise;
+    }
+
+    tokenRefreshPromise = new Promise((resolve, reject) => {
+        if (!tokenClient) {
+            return reject(new Error("Drive client not initialized. Cannot refresh token."));
+        }
+
+        const originalCallback = tokenClient.callback;
+
+        // Temporarily override callback to resolve this promise
+        if(tokenClient) {
+            tokenClient.callback = (tokenResponse) => {
+                if (tokenClient) tokenClient.callback = originalCallback; // Restore original callback
+                if (originalCallback) originalCallback(tokenResponse); // Execute original logic
+
+                if (tokenResponse && !tokenResponse.error) {
+                    resolve(tokenResponse);
+                } else {
+                    reject(new Error("Token refresh failed. The user may need to sign in again."));
+                }
+                tokenRefreshPromise = null; // Reset for future refreshes
+            };
+        }
+        
+        // Use `prompt: 'none'` for a true silent refresh attempt.
+        tokenClient.requestAccessToken({ prompt: 'none' }); 
+    });
+
+    return tokenRefreshPromise;
+}
+
+async function callDriveApi<T>(apiFunction: () => Promise<T>): Promise<T> {
+  try {
+    return await apiFunction();
+  } catch (error: any) {
+    const isAuthError = (error.result && error.result.error && error.result.error.code === 401) ||
+                        (error.status === 401);
+    
+    if (isAuthError) {
+      console.warn("Authentication error detected. Refreshing token...");
+      await refreshToken();
+      console.log("Token refreshed. Retrying API call.");
+      return await apiFunction();
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function getFileIdInternal(): Promise<string | null> {
     const response = await gapi.client.drive.files.list({
         spaces: 'appDataFolder',
         fields: 'files(id, name)',
@@ -166,28 +248,30 @@ async function getFileId(): Promise<string | null> {
 }
 
 export async function getSchedule(): Promise<Schedule | null> {
-    const fileId = await getFileId();
-    if (!fileId) {
-        return null;
-    }
+    return callDriveApi(async () => {
+        const fileId = await getFileIdInternal();
+        if (!fileId) {
+            return null;
+        }
 
-    const response = await gapi.client.drive.files.get({
-        fileId: fileId,
-        alt: 'media'
-    });
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
 
-    const scheduleData = JSON.parse(response.body);
-    Object.keys(scheduleData).forEach(weekId => {
-        scheduleData[weekId] = scheduleData[weekId].map((day: any) => ({
-            ...day,
-            date: new Date(day.date),
-        }));
+        const scheduleData = JSON.parse(response.body);
+        Object.keys(scheduleData).forEach(weekId => {
+            scheduleData[weekId] = scheduleData[weekId].map((day: any) => ({
+                ...day,
+                date: new Date(day.date),
+            }));
+        });
+        return scheduleData;
     });
-    return scheduleData;
 }
 
-export async function saveSchedule(schedule: Schedule): Promise<void> {
-    const fileId = await getFileId();
+async function saveScheduleInternal(schedule: Schedule): Promise<void> {
+    const fileId = await getFileIdInternal();
     const content = JSON.stringify(schedule);
     const blob = new Blob([content], { type: 'application/json' });
 
@@ -216,7 +300,14 @@ export async function saveSchedule(schedule: Schedule): Promise<void> {
     });
     
     if (!res.ok) {
+        if (res.status === 401) {
+            throw res;
+        }
         const errorBody = await res.json();
         throw new Error(`Failed to save to Google Drive: ${errorBody.error.message}`);
     }
+}
+
+export async function saveSchedule(schedule: Schedule): Promise<void> {
+    await callDriveApi(() => saveScheduleInternal(schedule));
 }
