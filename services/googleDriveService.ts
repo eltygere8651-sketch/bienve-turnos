@@ -73,15 +73,6 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 
 const FILENAME = 'bienve-app-schedule.json';
 
-// New function to check if credentials are actually provided.
-export const hasCredentials = () => !!GOOGLE_CLIENT_ID && !!API_KEY;
-
-// FIX: `isDriveConfigured` is now a dynamic check. The UI for Google Drive
-// will only be rendered if the credentials are provided in the environment.
-// This solves the user's issue by hiding the non-functional UI and the associated alert.
-export const isDriveConfigured = hasCredentials();
-
-
 let tokenClient: google.accounts.oauth2.TokenClient | null = null;
 
 interface GapiFile {
@@ -94,8 +85,8 @@ interface GapiFile {
  * Handles token management and user authentication state.
  */
 export async function initClient(onTokenResponseCallback: (tokenResponse: google.accounts.oauth2.TokenResponse) => void) {
-    if (!hasCredentials()) {
-        console.warn("Google Drive Sync is in demo mode because GOOGLE_CLIENT_ID and/or API_KEY are not configured.");
+    if (!GOOGLE_CLIENT_ID || !API_KEY) {
+        console.warn("Google Drive Sync is disabled because GOOGLE_CLIENT_ID and/or API_KEY are not configured in the environment.");
         return;
     }
 

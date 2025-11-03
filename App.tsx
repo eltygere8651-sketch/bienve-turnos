@@ -61,21 +61,16 @@ const App: React.FC = () => {
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
 
     useEffect(() => {
-        // Initialize Google Drive Service only if it's configured
-        if (driveService.isDriveConfigured) {
-            driveService.initClient((tokenResponse) => {
-                setIsDriveConnected(true);
-                setDriveUser(driveService.getProfile());
-                handleLoadFromDrive();
-            }).finally(() => setIsDriveLoading(false));
-        } else {
-            setIsDriveLoading(false);
-        }
-
+        // Initialize Google Drive Service
+        driveService.initClient((tokenResponse) => {
+            setIsDriveConnected(true);
+            setDriveUser(driveService.getProfile());
+            handleLoadFromDrive();
+        }).finally(() => setIsDriveLoading(false));
     }, []);
 
     const debouncedSaveToDrive = useDebouncedCallback(async (newSchedule: Schedule) => {
-        if (isDriveConnected && driveService.hasCredentials()) {
+        if (isDriveConnected) {
             setDriveSyncStatus('syncing');
             try {
                 await driveService.saveSchedule(newSchedule);
@@ -207,10 +202,6 @@ const App: React.FC = () => {
     };
 
     const handleSignIn = () => {
-        if (!driveService.hasCredentials()) {
-            alert('La funcionalidad de Google Drive está visible, pero no se han configurado las credenciales (GOOGLE_CLIENT_ID y API_KEY) en el entorno. Para activarla, obtén tus claves de Google Cloud y configúralas como "secrets" en tu entorno de despliegue.');
-            return;
-        }
         setIsDriveLoading(true);
         driveService.signIn(); // The callback in initClient will handle the rest
     };
@@ -257,7 +248,6 @@ const App: React.FC = () => {
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
-                isDriveConfigured={driveService.isDriveConfigured}
                 driveUser={driveUser}
                 isDriveConnected={isDriveConnected}
                 isDriveLoading={isDriveLoading}

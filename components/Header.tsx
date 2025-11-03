@@ -8,7 +8,6 @@ interface HeaderProps {
     onPrevWeek: () => void;
     onNextWeek: () => void;
     onCalendarClick: () => void;
-    isDriveConfigured: boolean;
     driveUser: DriveUser | null;
     isDriveConnected: boolean;
     isDriveLoading: boolean;
@@ -22,7 +21,6 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = (props) => {
     const { 
         currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick,
-        isDriveConfigured,
         ...driveProps 
     } = props;
     
@@ -60,7 +58,7 @@ const Header: React.FC<HeaderProps> = (props) => {
 
                 {/* --- Columna Derecha: Sincronización con Drive --- */}
                 <div className="flex items-center justify-end">
-                    {isDriveConfigured && <DriveSync {...driveProps} />}
+                    <DriveSync {...driveProps} />
                 </div>
             </div>
         </header>
