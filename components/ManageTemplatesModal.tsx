@@ -23,9 +23,12 @@ const ManageTemplatesModal: React.FC<ManageTemplatesModalProps> = ({ templates, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 border border-gray-700 flex flex-col">
-                <h2 className="text-2xl font-bold text-red-400 text-center mb-6">Gestionar Plantillas de Turnos</h2>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
+            <div 
+                className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 border border-gray-700 flex flex-col animate-fade-in-scale-up"
+                onClick={e => e.stopPropagation()}
+            >
+                <h2 className="text-2xl font-bold text-red-400 text-center mb-6">Gestionar Plantillas</h2>
                 
                 <div className="flex-grow overflow-y-auto max-h-[40vh] pr-2 space-y-2 mb-6">
                     {templates.length > 0 ? (

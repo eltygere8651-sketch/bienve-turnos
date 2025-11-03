@@ -2,18 +2,17 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus, DriveUser } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import * as notificationService from './services/notificationService';
 import * as driveService from './services/googleDriveService';
-import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, svgToPngDataUrl } from './services/pdfService';
+import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
 import EditShiftModal from './components/EditShiftModal';
 import { useShiftTemplates } from './hooks/useShiftTemplates';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
-import { LOGO_SVG_STRING } from './constants';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import ConfirmModal from './components/ConfirmModal';
+import CalendarPickerModal from './components/CalendarPickerModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 
@@ -40,12 +39,11 @@ const App: React.FC = () => {
         return {};
     });
     const [editingDay, setEditingDay] = useState<Day | null>(null);
-    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
-    const [logoPngUrl, setLogoPngUrl] = useState<string>('');
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     
     type DriveLoadConfirmationState = {
         isOpen: true;
@@ -63,11 +61,6 @@ const App: React.FC = () => {
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
 
     useEffect(() => {
-        if ('Notification' in window) {
-            setNotificationPermission(Notification.permission);
-        }
-        svgToPngDataUrl(LOGO_SVG_STRING, 100, 100).then(setLogoPngUrl).catch(console.error);
-        
         // Initialize Google Drive Service only if it's configured
         if (driveService.isDriveConfigured) {
             driveService.initClient((tokenResponse) => {
@@ -82,7 +75,7 @@ const App: React.FC = () => {
     }, []);
 
     const debouncedSaveToDrive = useDebouncedCallback(async (newSchedule: Schedule) => {
-        if (isDriveConnected) {
+        if (isDriveConnected && driveService.hasCredentials()) {
             setDriveSyncStatus('syncing');
             try {
                 await driveService.saveSchedule(newSchedule);
@@ -116,34 +109,6 @@ const App: React.FC = () => {
         return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
 
-    const nextWeekDate = useMemo(() => {
-         const date = new Date(currentDate);
-        date.setDate(date.getDate() + 7);
-        return date;
-    }, [currentDate]);
-
-    const nextWeekId = useMemo(() => getWeekId(nextWeekDate), [nextWeekDate]);
-
-    const nextWeekDays = useMemo(() => {
-        const days = getWeekDays(nextWeekDate);
-        if (!schedule[nextWeekId]) {
-            return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
-        }
-        return schedule[nextWeekId];
-    }, [nextWeekDate, schedule, nextWeekId]);
-
-
-    useEffect(() => {
-        if (notificationPermission === 'granted' && logoPngUrl) {
-            notificationService.scheduleNotificationsForWeek(weekDays, nextWeekDays, nextWeekId, logoPngUrl);
-        } else {
-            notificationService.clearAllNotifications();
-        }
-        return () => {
-            notificationService.clearAllNotifications();
-        };
-    }, [schedule, weekDays, nextWeekDays, nextWeekId, notificationPermission, logoPngUrl]);
-
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
             const currentWeekData = prevSchedule[weekId] || weekDays;
@@ -157,22 +122,6 @@ const App: React.FC = () => {
         setEditingDay(null);
     }, [weekId, weekDays]);
     
-    const handleSetWeekStatus = useCallback((status: DayStatus) => {
-        setSchedule(prevSchedule => {
-            const newWeekDays = weekDays.map(day => ({...day, status, shift: status === DayStatus.Work ? day.shift : ''}));
-            return {...prevSchedule, [weekId]: newWeekDays};
-        });
-    }, [weekId, weekDays]);
-
-    const handleClearWeek = useCallback(() => {
-        if (window.confirm('¿Estás seguro de que quieres borrar todos los turnos de esta semana?')) {
-            setSchedule(prevSchedule => {
-                const newWeekDays = weekDays.map(day => ({...day, shift: '', status: DayStatus.Work}));
-                return {...prevSchedule, [weekId]: newWeekDays};
-            });
-        }
-    }, [weekId, weekDays]);
-
     const { totalHours, overtimeHours } = useMemo(() => {
         const isVacationWeek = weekDays.every(day => day.status === DayStatus.Vacation);
         if(isVacationWeek) return { totalHours: 0, overtimeHours: 0};
@@ -200,8 +149,9 @@ const App: React.FC = () => {
         setCurrentDate(newDate);
     };
     
-    const handleGoToToday = () => {
-        setCurrentDate(new Date());
+    const handleDateSelect = (date: Date) => {
+        setCurrentDate(date);
+        setIsCalendarOpen(false);
     };
 
     const handleDownload = async () => {
@@ -256,12 +206,11 @@ const App: React.FC = () => {
         }
     };
 
-    const handleRequestPermission = async () => {
-        const permission = await notificationService.requestPermission();
-        setNotificationPermission(permission);
-    };
-
     const handleSignIn = () => {
+        if (!driveService.hasCredentials()) {
+            alert('La funcionalidad de Google Drive está visible, pero no se han configurado las credenciales (GOOGLE_CLIENT_ID y API_KEY) en el entorno. Para activarla, obtén tus claves de Google Cloud y configúralas como "secrets" en tu entorno de despliegue.');
+            return;
+        }
         setIsDriveLoading(true);
         driveService.signIn(); // The callback in initClient will handle the rest
     };
@@ -307,12 +256,7 @@ const App: React.FC = () => {
                 currentWeekTitle={getWeekTitle(currentDate)}
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
-                onGoToToday={handleGoToToday}
-                onDateChange={setCurrentDate}
-                onRequestPermission={handleRequestPermission}
-                notificationStatus={notificationPermission}
-                onDownloadMonth={handleDownloadMonth}
-                isDownloadingMonth={isDownloadingMonth}
+                onCalendarClick={() => setIsCalendarOpen(true)}
                 isDriveConfigured={driveService.isDriveConfigured}
                 driveUser={driveUser}
                 isDriveConnected={isDriveConnected}
@@ -323,12 +267,10 @@ const App: React.FC = () => {
                 driveSyncStatus={driveSyncStatus}
                 onRetrySync={handleRetrySync}
             />
-            <main className="flex-grow p-4 md:p-6 lg:p-8">
+            <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 
                     days={weekDays} 
                     onEditDay={setEditingDay} 
-                    onSetWeekStatus={handleSetWeekStatus}
-                    onClearWeek={handleClearWeek}
                 />
             </main>
             <Summary 
@@ -336,6 +278,8 @@ const App: React.FC = () => {
                 overtimeHours={overtimeHours}
                 onDownload={handleDownload}
                 isDownloading={isDownloading}
+                onDownloadMonth={handleDownloadMonth}
+                isDownloadingMonth={isDownloadingMonth}
             />
             {editingDay && (
                 <EditShiftModal
@@ -352,6 +296,14 @@ const App: React.FC = () => {
                     onAddTemplate={addTemplate}
                     onDeleteTemplate={deleteTemplate}
                     onClose={() => setIsManagingTemplates(false)}
+                />
+            )}
+             {isCalendarOpen && (
+                <CalendarPickerModal
+                    isOpen={isCalendarOpen}
+                    onClose={() => setIsCalendarOpen(false)}
+                    currentDate={currentDate}
+                    onDateSelect={handleDateSelect}
                 />
             )}
             <ConfirmModal

@@ -14,8 +14,11 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, title, message, onC
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 border border-gray-700">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={onCancel}>
+            <div 
+                className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 border border-gray-700 animate-fade-in-scale-up"
+                onClick={e => e.stopPropagation()}
+            >
                 <h2 id="modal-title" className="text-2xl font-bold text-red-400 mb-4">{title}</h2>
                 <p className="text-gray-300 mb-6">{message}</p>
                 <div className="flex justify-end space-x-4">

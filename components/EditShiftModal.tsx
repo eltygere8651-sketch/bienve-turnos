@@ -28,14 +28,17 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
     };
     
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 border border-gray-700 animate-fade-in">
-                <div className="text-center mb-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
+            <div 
+                className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 border border-gray-700 animate-fade-in-scale-up"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="text-center mb-6">
                     <h2 className="text-2xl font-bold text-red-400 capitalize">{formatDayName(day.date)}</h2>
                     <p className="text-gray-400">{formatDayDate(day.date)}</p>
                 </div>
                 
-                <div className="my-6 space-y-4">
+                <div className="my-6 space-y-6">
                     <div className="flex justify-center space-x-2">
                         <button onClick={() => handleStatusChange(DayStatus.Work)} className={`px-4 py-2 rounded-lg font-semibold transition ${status === DayStatus.Work ? 'bg-red-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>Trabajo</button>
                         <button onClick={() => handleStatusChange(DayStatus.Holiday)} className={`px-4 py-2 rounded-lg font-semibold transition ${status === DayStatus.Holiday ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>Festivo</button>
@@ -54,6 +57,7 @@ const EditShiftModal: React.FC<EditShiftModalProps> = ({ day, onClose, onSave, t
                                 onChange={(e) => setShift(e.target.value)}
                                 placeholder="Introduce el turno"
                                 className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                                autoFocus
                             />
                             <div className="mt-4">
                                 <div className="flex justify-between items-center mb-2">
