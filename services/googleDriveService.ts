@@ -73,11 +73,13 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 
 const FILENAME = 'bienve-app-schedule.json';
 
-// Always set to true to show the UI, but gate actual functionality on hasCredentials().
-export const isDriveConfigured = true;
-
 // New function to check if credentials are actually provided.
 export const hasCredentials = () => !!GOOGLE_CLIENT_ID && !!API_KEY;
+
+// FIX: `isDriveConfigured` is now a dynamic check. The UI for Google Drive
+// will only be rendered if the credentials are provided in the environment.
+// This solves the user's issue by hiding the non-functional UI and the associated alert.
+export const isDriveConfigured = hasCredentials();
 
 
 let tokenClient: google.accounts.oauth2.TokenClient | null = null;
