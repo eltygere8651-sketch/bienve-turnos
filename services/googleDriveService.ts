@@ -33,7 +33,15 @@ declare namespace google {
 }
 
 declare namespace gapi {
-    function load(api: 'client', callback: () => void): void;
+    // FIX: Updated the gapi.load type declaration to support a configuration object.
+    // This allows for more robust error handling with onerror and ontimeout callbacks,
+    // helping to diagnose initialization issues.
+    function load(api: 'client', config: (() => void) | {
+        callback: () => void;
+        onerror?: (error: any) => void;
+        timeout?: number;
+        ontimeout?: () => void;
+    }): void;
     namespace client {
         function init(args: {
             apiKey: string | undefined;
@@ -118,14 +126,28 @@ export async function initClient(
         await waitForGoogleScripts();
 
         await new Promise<void>((resolve, reject) => {
-            gapi.load('client', () => {
-                gapi.client.init({
-                    apiKey: apiKey,
-                    discoveryDocs: [DISCOVERY_DOC],
-                }).then(resolve).catch(err => {
-                     console.error("Error al inicializar el cliente GAPI:", err);
-                    reject(new Error("No se pudo inicializar el cliente de Google Drive."));
-                });
+            // FIX: Replaced the simple gapi.load callback with a more robust configuration object.
+            // This adds explicit error and timeout handling for loading the Google Drive client library,
+            // which helps diagnose initialization failures like the "API discovery response missing" error.
+            gapi.load('client', {
+                callback: () => {
+                    gapi.client.init({
+                        apiKey: apiKey,
+                        discoveryDocs: [DISCOVERY_DOC],
+                    }).then(resolve).catch(err => {
+                        console.error("Error al inicializar el cliente GAPI:", err);
+                        reject(new Error("No se pudo inicializar el cliente de Google Drive."));
+                    });
+                },
+                onerror: (err) => {
+                    console.error("Error al cargar el cliente GAPI:", err);
+                    reject(new Error("No se pudo cargar el cliente de GAPI. Revisa tu conexión o bloqueadores de anuncios."));
+                },
+                timeout: 10000,
+                ontimeout: () => {
+                    console.error("Timeout al cargar el cliente GAPI.");
+                    reject(new Error("La carga del cliente de GAPI tardó demasiado. Revisa tu conexión a internet."));
+                }
             });
         });
 
