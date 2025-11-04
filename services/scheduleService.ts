@@ -5,7 +5,7 @@ export interface ShiftPart {
 
 /**
  * Parses a time string (e.g., "12:30", "16.5", "C") into a decimal hour value.
- * This handles various user input formats for consistency.
+ * This is a strict parser, ensuring the token represents a single point in time.
  * @param timeStr The time string to parse.
  * @returns The time in hours as a float, or NaN if invalid.
  */
@@ -16,28 +16,63 @@ const parseTimeToHours = (timeStr: string): number => {
     if (trimmedStr === 'C') {
         return 24;
     }
+    
+    // A valid time token for this function should not be a range (e.g., "12-16").
+    if (trimmedStr.includes('-')) {
+        return NaN;
+    }
 
     const normalizedStr = trimmedStr.replace(',', '.');
 
     // Handles HH:MM format
     if (normalizedStr.includes(':')) {
-        const [hours, minutes] = normalizedStr.split(':').map(Number);
-        if (!isNaN(hours) && minutes >= 0 && minutes < 60) {
+        const parts = normalizedStr.split(':');
+        if (parts.length !== 2) return NaN;
+        
+        const hours = Number(parts[0]);
+        const minutes = Number(parts[1]);
+
+        // Allow hours up to 24 for end-of-day times like "24:00"
+        if (!isNaN(hours) && hours >= 0 && hours <= 24 && !isNaN(minutes) && minutes >= 0 && minutes < 60) {
+            if (hours === 24 && minutes > 0) return NaN; // 24:00 is valid, but 24:01 is not
             return hours + (minutes / 60);
         }
         return NaN; // Invalid HH:MM format
     }
     
-    // Handles decimal (e.g., 12.5) and integer (e.g., 12) formats
-    const num = parseFloat(normalizedStr);
-    return isNaN(num) ? NaN : num;
+    // Handles decimal (e.g., 12.5) and integer (e.g., 12) formats. Use Number() for stricter parsing than parseFloat().
+    const num = Number(normalizedStr);
+    if (isNaN(num) || num < 0 || num > 24) { 
+        return NaN;
+    }
+    return num;
 };
 
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
     
+    // Pre-processing step to pair up adjacent, space-separated time values (e.g., "13:30 18:30" -> "13:30-18:30")
+    const initialTokens = shift.trim().split(/\s+/);
+    const pairedTokens = [];
+    for (let i = 0; i < initialTokens.length; i++) {
+        const current = initialTokens[i];
+        const next = initialTokens[i + 1];
+
+        const isCurrentTime = !isNaN(parseTimeToHours(current));
+        const isNextTime = next ? !isNaN(parseTimeToHours(next)) : false;
+
+        // If the current token and the next token are both valid time values, pair them into a single shift range.
+        if (isCurrentTime && isNextTime) {
+            pairedTokens.push(`${current}-${next}`);
+            i++; // Skip the next token as it has now been paired
+        } else {
+            pairedTokens.push(current);
+        }
+    }
+    const processedShift = pairedTokens.join(' ');
+    
     // Normalize the shift string to remove spaces around hyphens, e.g., "10 - 14" becomes "10-14".
-    const normalizedShift = shift.replace(/\s*-\s*/g, '-');
+    const normalizedShift = processedShift.replace(/\s*-\s*/g, '-');
     const parts: ShiftPart[] = [];
     const timeSegments = normalizedShift.trim().split(/\s+/);
 
@@ -57,7 +92,7 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                 endStr = `${timeRange[2]}:${timeRange[3]}`;
                 break;
             default:
-                // For now, we don't support other formats like those with 3 parts due to ambiguity.
+                // We don't support other formats and will ignore invalid segments.
                 return;
         }
 
