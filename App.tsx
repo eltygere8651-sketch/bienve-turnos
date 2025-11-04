@@ -5,6 +5,7 @@ import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/da
 import { calculateHoursFromShift } from './services/scheduleService';
 import * as driveService from './services/googleDriveService';
 import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf } from './services/pdfService';
+import * as notificationService from './services/notificationService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -72,6 +73,9 @@ const App: React.FC = () => {
     const [driveInitError, setDriveInitError] = useState<string | null>(null);
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
     const [isDriveAvailable, setIsDriveAvailable] = useState(false);
+
+    // Notification State
+    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(Notification.permission);
 
     // Check for API keys on initial load
     useEffect(() => {
@@ -187,6 +191,29 @@ const App: React.FC = () => {
         const scheduledDaysMap = new Map(schedule[weekId].map(d => [new Date(d.date).toDateString(), d]));
         return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
+
+    // Effect for notification scheduling
+    useEffect(() => {
+        if (notificationPermission === 'granted') {
+            const nextWeekDate = new Date(currentDate);
+            nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+            const nextWeekId = getWeekId(nextWeekDate);
+            const nextWeekSchedule = schedule[nextWeekId] || getWeekDays(nextWeekDate).map(date => ({ date, shift: '', status: DayStatus.Work }));
+            
+            notificationService.scheduleNotificationsForWeek(weekDays, nextWeekSchedule, nextWeekId, '/logo.svg');
+        } else {
+            notificationService.clearAllNotifications();
+        }
+    }, [weekDays, schedule, notificationPermission, currentDate]);
+
+    const handleRequestNotifications = async () => {
+        if (Notification.permission !== 'denied') {
+            const permission = await notificationService.requestPermission();
+            setNotificationPermission(permission);
+        } else {
+            alert('Las notificaciones están bloqueadas. Por favor, habilítalas en la configuración de tu navegador si deseas usarlas.');
+        }
+    };
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
@@ -351,6 +378,8 @@ const App: React.FC = () => {
                 driveInitError={driveInitError}
                 isDriveAvailable={isDriveAvailable}
                 onConfigureApi={handleConfigureApi}
+                notificationPermission={notificationPermission}
+                onRequestNotifications={handleRequestNotifications}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 
