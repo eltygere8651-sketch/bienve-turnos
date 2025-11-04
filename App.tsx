@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Day, Schedule, DayStatus, DriveUser } from './types';
+import { Day, Schedule, DayStatus, DriveUser, DriveScheduleData } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
 import * as driveService from './services/googleDriveService';
@@ -9,12 +10,13 @@ import WeekView from './components/WeekView';
 import Summary from './components/Summary';
 import EditShiftModal from './components/EditShiftModal';
 import { useShiftTemplates } from './hooks/useShiftTemplates';
-import ManageTemplatesModal from './components/ManageTemplatesModal';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import ConfirmModal from './components/ConfirmModal';
 import CalendarPickerModal from './components/CalendarPickerModal';
+import ManageTemplatesModal from './components/ManageTemplatesModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
+const TIMESTAMP_STORAGE_KEY = 'bienveAppScheduleTimestamp';
 
 type DriveSyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -37,6 +39,9 @@ const App: React.FC = () => {
             console.error("Failed to load schedule from localStorage", error);
         }
         return {};
+    });
+    const [scheduleTimestamp, setScheduleTimestamp] = useState<string | null>(() => {
+        return localStorage.getItem(TIMESTAMP_STORAGE_KEY);
     });
     const [editingDay, setEditingDay] = useState<Day | null>(null);
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
@@ -62,34 +67,62 @@ const App: React.FC = () => {
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
     const [isDriveAvailable, setIsDriveAvailable] = useState(true);
 
+    const syncWithDrive = useCallback(async () => {
+        if (!isDriveConnected) return;
+        setIsDriveLoading(true);
+        try {
+            const driveData = await driveService.getSchedule();
+            const localTimestamp = localStorage.getItem(TIMESTAMP_STORAGE_KEY);
+    
+            if (driveData) {
+                // If Drive is newer than local, or if there's no local timestamp, prompt to load.
+                if (!localTimestamp || new Date(driveData.lastModified) > new Date(localTimestamp)) {
+                    setDriveLoadConfirmation({
+                        isOpen: true,
+                        onConfirm: () => {
+                            setSchedule(driveData.schedule);
+                            setScheduleTimestamp(driveData.lastModified);
+                            setDriveLoadConfirmation({ isOpen: false });
+                        },
+                    });
+                }
+            } else if (Object.keys(schedule).length > 0 && scheduleTimestamp) {
+                // No file on drive, but local data exists. Save it.
+                debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
+            }
+        } catch (e) {
+            alert("Error al sincronizar con Google Drive.");
+            console.error(e);
+        } finally {
+            setIsDriveLoading(false);
+        }
+    }, [isDriveConnected, schedule, scheduleTimestamp]);
+
     useEffect(() => {
         // Initialize Google Drive Service
         driveService.initClient((tokenResponse) => {
             setIsDriveConnected(true);
             setDriveUser(driveService.getProfile());
-            handleLoadFromDrive();
+            syncWithDrive();
         })
         .then(success => {
-            // This handles the case where API keys are not configured.
-            // The service returns `false`, and we silently disable the feature.
             if (!success) {
                 setIsDriveAvailable(false);
             }
         })
         .catch(err => {
-            // This handles other init errors (e.g., script timeout), which we want to report to the user.
             console.error("No se pudo inicializar el servicio de Google Drive:", err.message);
             setDriveInitError(err.message);
-            setIsDriveAvailable(false); // Also disable the feature on other errors.
+            setIsDriveAvailable(false);
         })
         .finally(() => setIsDriveLoading(false));
-    }, []);
+    }, [syncWithDrive]);
 
-    const debouncedSaveToDrive = useDebouncedCallback(async (newSchedule: Schedule) => {
+    const debouncedSaveToDrive = useDebouncedCallback(async (dataToSave: DriveScheduleData) => {
         if (isDriveConnected) {
             setDriveSyncStatus('syncing');
             try {
-                await driveService.saveSchedule(newSchedule);
+                await driveService.saveSchedule(dataToSave);
                 setDriveSyncStatus('success');
                 setTimeout(() => setDriveSyncStatus('idle'), 3000); // Reset after 3s
             } catch (e) {
@@ -102,11 +135,14 @@ const App: React.FC = () => {
     useEffect(() => {
         try {
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
-            debouncedSaveToDrive(schedule);
+            if (scheduleTimestamp) {
+                localStorage.setItem(TIMESTAMP_STORAGE_KEY, scheduleTimestamp);
+                debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
+            }
         } catch (error) {
             console.error("Failed to save schedule to localStorage", error);
         }
-    }, [schedule, debouncedSaveToDrive]);
+    }, [schedule, scheduleTimestamp, debouncedSaveToDrive]);
 
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
@@ -130,6 +166,7 @@ const App: React.FC = () => {
             }
             return { ...prevSchedule, [weekId]: newWeekDays };
         });
+        setScheduleTimestamp(new Date().toISOString());
         setEditingDay(null);
     }, [weekId, weekDays]);
     
@@ -250,8 +287,6 @@ const App: React.FC = () => {
     };
 
     const handleSignIn = () => {
-        // By not setting `isDriveLoading`, we avoid a stuck UI if the user closes the popup.
-        // The loading state is handled inside `handleLoadFromDrive` after a successful sign-in.
         driveService.signIn();
     };
 
@@ -260,34 +295,11 @@ const App: React.FC = () => {
         setIsDriveConnected(false);
         setDriveUser(null);
     };
-
-    const handleLoadFromDrive = async () => {
-        if (!isDriveConnected) return;
-        setIsDriveLoading(true);
-        try {
-            const driveSchedule = await driveService.getSchedule();
-            if (driveSchedule) {
-                 setDriveLoadConfirmation({
-                    isOpen: true,
-                    onConfirm: () => {
-                        setSchedule(driveSchedule);
-                        setDriveLoadConfirmation({isOpen: false});
-                    }
-                 });
-            } else {
-                // Do not alert if no schedule is found, it's a normal case for new users.
-                // It can be annoying to see this alert every time.
-            }
-        } catch (e) {
-            alert("Error al cargar los datos de Google Drive.");
-            console.error(e);
-        } finally {
-            setIsDriveLoading(false);
-        }
-    };
     
     const handleRetrySync = () => {
-        debouncedSaveToDrive(schedule);
+        if (scheduleTimestamp) {
+            debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
+        }
     };
 
     return (
@@ -302,7 +314,7 @@ const App: React.FC = () => {
                 isDriveLoading={isDriveLoading}
                 onSignIn={handleSignIn}
                 onSignOut={handleSignOut}
-                onForceSync={handleLoadFromDrive}
+                onForceSync={syncWithDrive}
                 driveSyncStatus={driveSyncStatus}
                 onRetrySync={handleRetrySync}
                 driveInitError={driveInitError}
@@ -350,7 +362,7 @@ const App: React.FC = () => {
             <ConfirmModal
                 isOpen={driveLoadConfirmation.isOpen}
                 title="Cargar desde Google Drive"
-                message="Se encontró un horario en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales? Esta acción no se puede deshacer."
+                message="Se encontró un horario más reciente en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales? Esta acción no se puede deshacer."
                 confirmText="Cargar Horario"
                 onConfirm={driveLoadConfirmation.isOpen ? driveLoadConfirmation.onConfirm : () => {}}
                 onCancel={() => setDriveLoadConfirmation({ isOpen: false })}

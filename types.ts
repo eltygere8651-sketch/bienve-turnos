@@ -20,3 +20,8 @@ export interface DriveUser {
     email: string;
     picture: string;
 }
+
+export interface DriveScheduleData {
+  schedule: Schedule;
+  lastModified: string; // ISO string
+}

@@ -1,4 +1,4 @@
-import { Schedule, DriveUser } from '../types';
+import { Schedule, DriveUser, DriveScheduleData } from '../types';
 
 // Add type declarations for Google Sign-In and Google Drive APIs.
 // These are loaded globally from script tags, so we need to inform TypeScript about their existence and shape.
@@ -247,7 +247,7 @@ async function getFileIdInternal(): Promise<string | null> {
     return existingFile ? existingFile.id : null;
 }
 
-export async function getSchedule(): Promise<Schedule | null> {
+export async function getSchedule(): Promise<DriveScheduleData | null> {
     return callDriveApi(async () => {
         const fileId = await getFileIdInternal();
         if (!fileId) {
@@ -258,21 +258,27 @@ export async function getSchedule(): Promise<Schedule | null> {
             fileId: fileId,
             alt: 'media'
         });
+        
+        if (!response.body) return null;
 
-        const scheduleData = JSON.parse(response.body);
-        Object.keys(scheduleData).forEach(weekId => {
-            scheduleData[weekId] = scheduleData[weekId].map((day: any) => ({
-                ...day,
-                date: new Date(day.date),
-            }));
-        });
-        return scheduleData;
+        const driveData: DriveScheduleData = JSON.parse(response.body);
+
+        // Re-hydrate date objects after parsing from JSON
+        if (driveData && driveData.schedule) {
+            Object.keys(driveData.schedule).forEach(weekId => {
+                driveData.schedule[weekId] = driveData.schedule[weekId].map((day: any) => ({
+                    ...day,
+                    date: new Date(day.date),
+                }));
+            });
+        }
+        return driveData;
     });
 }
 
-async function saveScheduleInternal(schedule: Schedule): Promise<void> {
+async function saveScheduleInternal(scheduleData: DriveScheduleData): Promise<void> {
     const fileId = await getFileIdInternal();
-    const content = JSON.stringify(schedule);
+    const content = JSON.stringify(scheduleData);
     const blob = new Blob([content], { type: 'application/json' });
 
     const metadata = {
@@ -308,6 +314,6 @@ async function saveScheduleInternal(schedule: Schedule): Promise<void> {
     }
 }
 
-export async function saveSchedule(schedule: Schedule): Promise<void> {
-    await callDriveApi(() => saveScheduleInternal(schedule));
+export async function saveSchedule(scheduleData: DriveScheduleData): Promise<void> {
+    await callDriveApi(() => saveScheduleInternal(scheduleData));
 }
