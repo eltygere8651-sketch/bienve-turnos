@@ -1,13 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 
-// This check is important for environments where API_KEY might not be set.
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  console.warn("Gemini API key is not configured. Voice input feature will be disabled.");
-}
+let ai: GoogleGenAI | null = null;
 
-// Initialize Gemini only if the API key is available
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+export const initializeGemini = (apiKey: string): boolean => {
+    if (!apiKey) {
+        console.warn("La clave de API de Gemini no se proporcionó. La función de entrada de voz estará deshabilitada.");
+        ai = null;
+        return false;
+    }
+    
+    try {
+        ai = new GoogleGenAI({ apiKey });
+        console.log("Servicio de Gemini inicializado correctamente.");
+        return true;
+    } catch (error) {
+        console.error("No se pudo inicializar el servicio de Gemini AI:", error);
+        ai = null;
+        return false;
+    }
+};
 
 const SYSTEM_INSTRUCTION = `
 You are an expert assistant for a hospitality work schedule app called "Bienve App".
@@ -32,7 +43,7 @@ Examples:
 
 export const parseShiftWithGemini = async (text: string): Promise<string> => {
     if (!ai) {
-        throw new Error("Gemini AI service is not initialized. Check API_KEY.");
+        throw new Error("El servicio de Gemini AI no está inicializado. Por favor, configura las claves de API.");
     }
     if (!text) return '';
 

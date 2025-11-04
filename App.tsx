@@ -14,6 +14,9 @@ import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 import ConfirmModal from './components/ConfirmModal';
 import CalendarPickerModal from './components/CalendarPickerModal';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
+import * as apiKeyService from './services/apiKeyService';
+import { initializeGemini } from './services/geminiService';
+import ApiKeyModal from './components/ApiKeyModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 const TIMESTAMP_STORAGE_KEY = 'bienveAppScheduleTimestamp';
@@ -58,6 +61,9 @@ const App: React.FC = () => {
     };
     const [driveLoadConfirmation, setDriveLoadConfirmation] = useState<DriveLoadConfirmationState>({ isOpen: false });
 
+    // API Key Management State
+    const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+    const [apiKeys, setApiKeys] = useState<apiKeyService.ApiKeys | null>(null);
 
     // Google Drive State
     const [isDriveConnected, setIsDriveConnected] = useState(false);
@@ -65,7 +71,17 @@ const App: React.FC = () => {
     const [driveUser, setDriveUser] = useState<DriveUser | null>(null);
     const [driveInitError, setDriveInitError] = useState<string | null>(null);
     const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
-    const [isDriveAvailable, setIsDriveAvailable] = useState(true);
+    const [isDriveAvailable, setIsDriveAvailable] = useState(false);
+
+    // Check for API keys on initial load
+    useEffect(() => {
+        const keys = apiKeyService.getApiKeys();
+        if (keys) {
+            setApiKeys(keys);
+        } else {
+            setIsApiKeyModalOpen(true);
+        }
+    }, []);
 
     const syncWithDrive = useCallback(async () => {
         if (!isDriveConnected) return;
@@ -75,7 +91,6 @@ const App: React.FC = () => {
             const localTimestamp = localStorage.getItem(TIMESTAMP_STORAGE_KEY);
     
             if (driveData) {
-                // If Drive is newer than local, or if there's no local timestamp, prompt to load.
                 if (!localTimestamp || new Date(driveData.lastModified) > new Date(localTimestamp)) {
                     setDriveLoadConfirmation({
                         isOpen: true,
@@ -87,7 +102,6 @@ const App: React.FC = () => {
                     });
                 }
             } else if (Object.keys(schedule).length > 0 && scheduleTimestamp) {
-                // No file on drive, but local data exists. Save it.
                 debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
             }
         } catch (e) {
@@ -98,16 +112,33 @@ const App: React.FC = () => {
         }
     }, [isDriveConnected, schedule, scheduleTimestamp]);
 
+    // Effect to initialize services when API keys are available
     useEffect(() => {
-        // Initialize Google Drive Service
-        driveService.initClient((tokenResponse) => {
-            setIsDriveConnected(true);
-            setDriveUser(driveService.getProfile());
-            syncWithDrive();
-        })
+        if (!apiKeys) {
+            setIsDriveAvailable(false);
+            setDriveInitError("Las claves de API no están configuradas.");
+            setIsDriveLoading(false);
+            return;
+        }
+
+        initializeGemini(apiKeys.apiKey);
+
+        setIsDriveLoading(true);
+        driveService.initClient(
+            apiKeys.clientId, 
+            apiKeys.apiKey,
+            (tokenResponse) => { // onTokenResponseCallback
+                setIsDriveConnected(true);
+                setDriveUser(driveService.getProfile());
+                syncWithDrive();
+            }
+        )
         .then(success => {
-            if (!success) {
-                setIsDriveAvailable(false);
+            setIsDriveAvailable(success);
+            if (success) {
+                setDriveInitError(null);
+            } else {
+                 setDriveInitError("No se pudo inicializar. Revisa las claves de API.");
             }
         })
         .catch(err => {
@@ -116,7 +147,8 @@ const App: React.FC = () => {
             setIsDriveAvailable(false);
         })
         .finally(() => setIsDriveLoading(false));
-    }, [syncWithDrive]);
+
+    }, [apiKeys, syncWithDrive]);
 
     const debouncedSaveToDrive = useDebouncedCallback(async (dataToSave: DriveScheduleData) => {
         if (isDriveConnected) {
@@ -124,7 +156,7 @@ const App: React.FC = () => {
             try {
                 await driveService.saveSchedule(dataToSave);
                 setDriveSyncStatus('success');
-                setTimeout(() => setDriveSyncStatus('idle'), 3000); // Reset after 3s
+                setTimeout(() => setDriveSyncStatus('idle'), 3000);
             } catch (e) {
                 console.error("Failed to save to Drive", e);
                 setDriveSyncStatus('error');
@@ -222,21 +254,16 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
-            // 1. Get all dates in the target month to find which weeks are involved.
             const daysInMonth = getDaysInMonth(currentDate);
-    
-            // 2. Use a Set to collect unique week IDs that overlap with the month.
             const weekIdsInMonth = new Set<string>();
             daysInMonth.forEach(dayInMonth => {
                 weekIdsInMonth.add(getWeekId(dayInMonth));
             });
     
-            // 3. For each unique week, get all 7 of its days and collect them.
             const allDatesInWeeks: Date[] = [];
             const processedDates = new Set<string>();
     
             Array.from(weekIdsInMonth).forEach(weekId => {
-                // Find a representative date from the month to get the full week's days
                 const refDate = daysInMonth.find(d => getWeekId(d) === weekId)!;
                 const weekDays = getWeekDays(refDate);
     
@@ -249,17 +276,14 @@ const App: React.FC = () => {
                 });
             });
             
-            // Sort all collected dates chronologically.
             allDatesInWeeks.sort((a,b) => a.getTime() - b.getTime());
     
-            // 4. Map these dates to Day objects, pulling saved data from the main schedule.
             const monthSchedule: Day[] = allDatesInWeeks.map(date => {
                 const weekId = getWeekId(date);
                 const dayData = schedule[weekId]?.find(d => new Date(d.date).toDateString() === date.toDateString());
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
     
-            // 5. Calculate totals based on the full data collected.
             const totalHoursMonth = monthSchedule.reduce((acc, day) => {
                 if (day.status === DayStatus.Work) {
                     return acc + calculateHoursFromShift(day.shift);
@@ -267,7 +291,6 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
-            // Overtime is based on 40h per week involved in the report.
             const overtimeThreshold = weekIdsInMonth.size * 40;
             const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
     
@@ -286,10 +309,7 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSignIn = () => {
-        driveService.signIn();
-    };
-
+    const handleSignIn = () => driveService.signIn();
     const handleSignOut = () => {
         driveService.signOut();
         setIsDriveConnected(false);
@@ -302,8 +322,19 @@ const App: React.FC = () => {
         }
     };
 
+    const handleSaveKeys = (keys: apiKeyService.ApiKeys) => {
+        apiKeyService.saveApiKeys(keys);
+        setApiKeys(keys);
+        setIsApiKeyModalOpen(false);
+    };
+
+    const handleConfigureApi = () => {
+        setIsApiKeyModalOpen(true);
+    };
+
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
+            {isApiKeyModalOpen && <ApiKeyModal onSave={handleSaveKeys} />}
             <Header
                 currentWeekTitle={getWeekTitle(currentDate)}
                 onPrevWeek={handlePrevWeek}
@@ -319,6 +350,7 @@ const App: React.FC = () => {
                 onRetrySync={handleRetrySync}
                 driveInitError={driveInitError}
                 isDriveAvailable={isDriveAvailable}
+                onConfigureApi={handleConfigureApi}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 

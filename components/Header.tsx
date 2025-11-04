@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from './icons';
+import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, Cog6ToothIcon } from './icons';
 import { DriveUser } from '../types';
 import DriveSync from './DriveSync';
 
@@ -18,12 +18,14 @@ interface HeaderProps {
     onRetrySync: () => void;
     driveInitError: string | null;
     isDriveAvailable: boolean;
+    onConfigureApi: () => void;
 }
 
 const Header: React.FC<HeaderProps> = (props) => {
     const { 
         currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick,
         isDriveAvailable,
+        onConfigureApi,
         ...driveProps 
     } = props;
     
@@ -61,7 +63,19 @@ const Header: React.FC<HeaderProps> = (props) => {
 
                 {/* --- Columna Derecha: Sincronización con Drive --- */}
                 <div className="flex items-center justify-end">
-                    {isDriveAvailable && <DriveSync {...driveProps} />}
+                    {isDriveAvailable 
+                        ? <DriveSync {...driveProps} onConfigureApi={onConfigureApi} />
+                        : (
+                            <button
+                                onClick={onConfigureApi}
+                                className="flex items-center space-x-2 px-3 py-2 text-sm bg-gray-700 hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors duration-200"
+                                title="Configura tus claves de API para habilitar la sincronización"
+                            >
+                                <Cog6ToothIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline">Configurar API</span>
+                            </button>
+                        )
+                    }
                 </div>
             </div>
         </header>

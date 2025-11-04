@@ -68,8 +68,6 @@ declare global {
 }
 
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const API_KEY = process.env.API_KEY; // For GAPI discovery
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 
@@ -106,10 +104,12 @@ const waitForGoogleScripts = (timeout = 10000): Promise<void> => {
  * Initializes the Google API client and Google Identity Services client.
  * Handles token management and user authentication state.
  */
-export async function initClient(onTokenResponseCallback: (tokenResponse: google.accounts.oauth2.TokenResponse) => void): Promise<boolean> {
-    if (!GOOGLE_CLIENT_ID || !API_KEY) {
-        // Instead of throwing, we just inform that the feature is disabled and return false.
-        // This prevents the app from showing an error when the feature is intentionally not configured.
+export async function initClient(
+    clientId: string,
+    apiKey: string,
+    onTokenResponseCallback: (tokenResponse: google.accounts.oauth2.TokenResponse) => void
+): Promise<boolean> {
+    if (!clientId || !apiKey) {
         console.log("Google Drive sync is disabled because API keys are not configured.");
         return false;
     }
@@ -120,7 +120,7 @@ export async function initClient(onTokenResponseCallback: (tokenResponse: google
         await new Promise<void>((resolve, reject) => {
             gapi.load('client', () => {
                 gapi.client.init({
-                    apiKey: API_KEY,
+                    apiKey: apiKey,
                     discoveryDocs: [DISCOVERY_DOC],
                 }).then(resolve).catch(err => {
                      console.error("Error al inicializar el cliente GAPI:", err);
@@ -130,7 +130,7 @@ export async function initClient(onTokenResponseCallback: (tokenResponse: google
         });
 
         tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
+            client_id: clientId,
             scope: SCOPES,
             callback: (tokenResponse) => {
                 if (tokenResponse && tokenResponse.access_token) {

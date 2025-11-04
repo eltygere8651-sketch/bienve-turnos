@@ -12,9 +12,10 @@ interface DriveSyncProps {
     onForceSync: () => void;
     driveSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
     onRetrySync: () => void;
+    onConfigureApi: () => void;
 }
 
-const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, driveInitError, onSignIn, onSignOut, onForceSync, driveSyncStatus, onRetrySync }) => {
+const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDriveLoading, driveInitError, onSignIn, onSignOut, onForceSync, driveSyncStatus, onRetrySync, onConfigureApi }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -101,6 +102,13 @@ const DriveSync: React.FC<DriveSyncProps> = ({ driveUser, isDriveConnected, isDr
                             className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
                         >
                             Sincronizar ahora
+                        </a>
+                        <a
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); onConfigureApi(); setIsMenuOpen(false); }}
+                            className="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                        >
+                            Configurar API
                         </a>
                         <a
                             href="#"
