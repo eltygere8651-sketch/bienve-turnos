@@ -58,15 +58,18 @@ const App: React.FC = () => {
         if (!schedule[weekId]) {
             return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
         }
-        const scheduledDaysMap = new Map(schedule[weekId].map(d => [new Date(d.date).toDateString(), d]));
-        return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
+        // FIX: Use ISO string (YYYY-MM-DD) for robust date keying in the map.
+        // This prevents inconsistencies with `toDateString()` across different browsers and platforms (like mobile vs. desktop).
+        const scheduledDaysMap = new Map(schedule[weekId].map(d => [new Date(d.date).toISOString().slice(0, 10), d]));
+        return days.map(date => scheduledDaysMap.get(date.toISOString().slice(0, 10)) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
             const currentWeekData = prevSchedule[weekId] || weekDays;
             const newWeekDays = [...currentWeekData];
-            const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toDateString() === updatedDay.date.toDateString());
+            // FIX: Use ISO string (YYYY-MM-DD) for comparison to reliably find the day to update.
+            const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === updatedDay.date.toISOString().slice(0, 10));
             if (dayIndex !== -1) {
                 newWeekDays[dayIndex] = updatedDay;
             }
@@ -127,18 +130,17 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
-            // Step 1: Get all dates for the currently selected month.
             const daysInMonth = getDaysInMonth(currentDate);
             
-            // Step 2: Create the schedule for the month by mapping over the days of the month.
-            // This ensures we only include days within the selected month, fixing the bug.
+            // FIX: Switched to comparing dates using ISO strings (`.toISOString().slice(0, 10)`).
+            // This resolves a critical bug on mobile devices where `toDateString()` can produce a different format
+            // than on desktop, causing the lookup to fail and shifts to not appear in the downloaded PDF.
             const monthSchedule: Day[] = daysInMonth.map(date => {
                 const weekId = getWeekId(date);
-                const dayData = schedule[weekId]?.find(d => new Date(d.date).toDateString() === date.toDateString());
+                const dayData = schedule[weekId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === date.toISOString().slice(0, 10));
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
 
-            // Step 3: Calculate total hours for the month from the corrected schedule.
             const totalHoursMonth = monthSchedule.reduce((acc, day) => {
                 if (day.status === DayStatus.Work) {
                     return acc + calculateHoursFromShift(day.shift);
@@ -146,12 +148,10 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
-            // Step 4: Calculate the overtime threshold based on the number of unique weeks the month spans.
             const weekIdsInMonth = new Set(daysInMonth.map(d => getWeekId(d)));
             const overtimeThreshold = weekIdsInMonth.size * 40;
             const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
     
-            // Step 5: Call the PDF generation service with the corrected data.
             await downloadMonthScheduleAsPdf({
                 monthDays: monthSchedule,
                 currentDate,
