@@ -1,28 +1,18 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Day, Schedule, DayStatus, DriveUser, DriveScheduleData } from './types';
+import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import * as driveService from './services/googleDriveService';
 import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf } from './services/pdfService';
-import * as notificationService from './services/notificationService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
 import EditShiftModal from './components/EditShiftModal';
 import { useShiftTemplates } from './hooks/useShiftTemplates';
-import { useDebouncedCallback } from './hooks/useDebouncedCallback';
-import ConfirmModal from './components/ConfirmModal';
 import CalendarPickerModal from './components/CalendarPickerModal';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
-import * as apiKeyService from './services/apiKeyService';
-import { initializeGemini } from './services/geminiService';
-import ApiKeyModal from './components/ApiKeyModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
-const TIMESTAMP_STORAGE_KEY = 'bienveAppScheduleTimestamp';
-
-type DriveSyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
 const App: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -31,6 +21,7 @@ const App: React.FC = () => {
             const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             if (savedSchedule) {
                 const parsed = JSON.parse(savedSchedule);
+                // Re-hydrate Date objects
                 Object.keys(parsed).forEach(weekId => {
                     parsed[weekId] = parsed[weekId].map((day: any) => ({
                         ...day,
@@ -44,142 +35,21 @@ const App: React.FC = () => {
         }
         return {};
     });
-    const [scheduleTimestamp, setScheduleTimestamp] = useState<string | null>(() => {
-        return localStorage.getItem(TIMESTAMP_STORAGE_KEY);
-    });
+    
     const [editingDay, setEditingDay] = useState<Day | null>(null);
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-    
-    type DriveLoadConfirmationState = {
-        isOpen: true;
-        onConfirm: () => void;
-    } | {
-        isOpen: false;
-    };
-    const [driveLoadConfirmation, setDriveLoadConfirmation] = useState<DriveLoadConfirmationState>({ isOpen: false });
-
-    // API Key Management State
-    const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-    const [apiKeys, setApiKeys] = useState<apiKeyService.ApiKeys | null>(null);
-
-    // Google Drive State
-    const [isDriveConnected, setIsDriveConnected] = useState(false);
-    const [isDriveLoading, setIsDriveLoading] = useState(true);
-    const [driveUser, setDriveUser] = useState<DriveUser | null>(null);
-    const [driveInitError, setDriveInitError] = useState<string | null>(null);
-    const [driveSyncStatus, setDriveSyncStatus] = useState<DriveSyncStatus>('idle');
-    const [isDriveAvailable, setIsDriveAvailable] = useState(false);
-
-    // Notification State
-    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(Notification.permission);
-
-    // Check for API keys on initial load
-    useEffect(() => {
-        const keys = apiKeyService.getApiKeys();
-        if (keys) {
-            setApiKeys(keys);
-        } else {
-            setIsApiKeyModalOpen(true);
-        }
-    }, []);
-
-    const syncWithDrive = useCallback(async () => {
-        if (!isDriveConnected) return;
-        setIsDriveLoading(true);
-        try {
-            const driveData = await driveService.getSchedule();
-            const localTimestamp = localStorage.getItem(TIMESTAMP_STORAGE_KEY);
-    
-            if (driveData) {
-                if (!localTimestamp || new Date(driveData.lastModified) > new Date(localTimestamp)) {
-                    setDriveLoadConfirmation({
-                        isOpen: true,
-                        onConfirm: () => {
-                            setSchedule(driveData.schedule);
-                            setScheduleTimestamp(driveData.lastModified);
-                            setDriveLoadConfirmation({ isOpen: false });
-                        },
-                    });
-                }
-            } else if (Object.keys(schedule).length > 0 && scheduleTimestamp) {
-                debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
-            }
-        } catch (e) {
-            alert("Error al sincronizar con Google Drive.");
-            console.error(e);
-        } finally {
-            setIsDriveLoading(false);
-        }
-    }, [isDriveConnected, schedule, scheduleTimestamp]);
-
-    // Effect to initialize services when API keys are available
-    useEffect(() => {
-        if (!apiKeys) {
-            setIsDriveAvailable(false);
-            setDriveInitError("Las claves de API no están configuradas.");
-            setIsDriveLoading(false);
-            return;
-        }
-
-        initializeGemini(apiKeys.apiKey);
-
-        setIsDriveLoading(true);
-        driveService.initClient(
-            apiKeys.clientId, 
-            apiKeys.apiKey,
-            (tokenResponse) => { // onTokenResponseCallback
-                setIsDriveConnected(true);
-                setDriveUser(driveService.getProfile());
-                syncWithDrive();
-            }
-        )
-        .then(success => {
-            setIsDriveAvailable(success);
-            if (success) {
-                setDriveInitError(null);
-            } else {
-                 setDriveInitError("No se pudo inicializar. Revisa las claves de API.");
-            }
-        })
-        .catch(err => {
-            console.error("No se pudo inicializar el servicio de Google Drive:", err.message);
-            setDriveInitError(err.message);
-            setIsDriveAvailable(false);
-        })
-        .finally(() => setIsDriveLoading(false));
-
-    }, [apiKeys, syncWithDrive]);
-
-    const debouncedSaveToDrive = useDebouncedCallback(async (dataToSave: DriveScheduleData) => {
-        if (isDriveConnected) {
-            setDriveSyncStatus('syncing');
-            try {
-                await driveService.saveSchedule(dataToSave);
-                setDriveSyncStatus('success');
-                setTimeout(() => setDriveSyncStatus('idle'), 3000);
-            } catch (e) {
-                console.error("Failed to save to Drive", e);
-                setDriveSyncStatus('error');
-            }
-        }
-    }, 2000);
 
     useEffect(() => {
         try {
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
-            if (scheduleTimestamp) {
-                localStorage.setItem(TIMESTAMP_STORAGE_KEY, scheduleTimestamp);
-                debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
-            }
         } catch (error) {
             console.error("Failed to save schedule to localStorage", error);
         }
-    }, [schedule, scheduleTimestamp, debouncedSaveToDrive]);
-
+    }, [schedule]);
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
@@ -192,29 +62,6 @@ const App: React.FC = () => {
         return days.map(date => scheduledDaysMap.get(date.toDateString()) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
 
-    // Effect for notification scheduling
-    useEffect(() => {
-        if (notificationPermission === 'granted') {
-            const nextWeekDate = new Date(currentDate);
-            nextWeekDate.setDate(nextWeekDate.getDate() + 7);
-            const nextWeekId = getWeekId(nextWeekDate);
-            const nextWeekSchedule = schedule[nextWeekId] || getWeekDays(nextWeekDate).map(date => ({ date, shift: '', status: DayStatus.Work }));
-            
-            notificationService.scheduleNotificationsForWeek(weekDays, nextWeekSchedule, nextWeekId, '/logo.svg');
-        } else {
-            notificationService.clearAllNotifications();
-        }
-    }, [weekDays, schedule, notificationPermission, currentDate]);
-
-    const handleRequestNotifications = async () => {
-        if (Notification.permission !== 'denied') {
-            const permission = await notificationService.requestPermission();
-            setNotificationPermission(permission);
-        } else {
-            alert('Las notificaciones están bloqueadas. Por favor, habilítalas en la configuración de tu navegador si deseas usarlas.');
-        }
-    };
-
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
             const currentWeekData = prevSchedule[weekId] || weekDays;
@@ -225,7 +72,6 @@ const App: React.FC = () => {
             }
             return { ...prevSchedule, [weekId]: newWeekDays };
         });
-        setScheduleTimestamp(new Date().toISOString());
         setEditingDay(null);
     }, [weekId, weekDays]);
     
@@ -336,50 +182,13 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSignIn = () => driveService.signIn();
-    const handleSignOut = () => {
-        driveService.signOut();
-        setIsDriveConnected(false);
-        setDriveUser(null);
-    };
-    
-    const handleRetrySync = () => {
-        if (scheduleTimestamp) {
-            debouncedSaveToDrive({ schedule, lastModified: scheduleTimestamp });
-        }
-    };
-
-    const handleSaveKeys = (keys: apiKeyService.ApiKeys) => {
-        apiKeyService.saveApiKeys(keys);
-        setApiKeys(keys);
-        setIsApiKeyModalOpen(false);
-    };
-
-    const handleConfigureApi = () => {
-        setIsApiKeyModalOpen(true);
-    };
-
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
-            {isApiKeyModalOpen && <ApiKeyModal onSave={handleSaveKeys} />}
             <Header
                 currentWeekTitle={getWeekTitle(currentDate)}
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
-                driveUser={driveUser}
-                isDriveConnected={isDriveConnected}
-                isDriveLoading={isDriveLoading}
-                onSignIn={handleSignIn}
-                onSignOut={handleSignOut}
-                onForceSync={syncWithDrive}
-                driveSyncStatus={driveSyncStatus}
-                onRetrySync={handleRetrySync}
-                driveInitError={driveInitError}
-                isDriveAvailable={isDriveAvailable}
-                onConfigureApi={handleConfigureApi}
-                notificationPermission={notificationPermission}
-                onRequestNotifications={handleRequestNotifications}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 
@@ -420,14 +229,6 @@ const App: React.FC = () => {
                     onDateSelect={handleDateSelect}
                 />
             )}
-            <ConfirmModal
-                isOpen={driveLoadConfirmation.isOpen}
-                title="Cargar desde Google Drive"
-                message="Se encontró un horario más reciente en Google Drive. ¿Quieres cargarlo y reemplazar tus datos locales? Esta acción no se puede deshacer."
-                confirmText="Cargar Horario"
-                onConfirm={driveLoadConfirmation.isOpen ? driveLoadConfirmation.onConfirm : () => {}}
-                onCancel={() => setDriveLoadConfirmation({ isOpen: false })}
-            />
         </div>
     );
 };
