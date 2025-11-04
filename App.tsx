@@ -185,30 +185,62 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
+            // 1. Get all dates in the target month to find which weeks are involved.
             const daysInMonth = getDaysInMonth(currentDate);
-            const monthSchedule: Day[] = daysInMonth.map(date => {
+    
+            // 2. Use a Set to collect unique week IDs that overlap with the month.
+            const weekIdsInMonth = new Set<string>();
+            daysInMonth.forEach(dayInMonth => {
+                weekIdsInMonth.add(getWeekId(dayInMonth));
+            });
+    
+            // 3. For each unique week, get all 7 of its days and collect them.
+            const allDatesInWeeks: Date[] = [];
+            const processedDates = new Set<string>();
+    
+            Array.from(weekIdsInMonth).forEach(weekId => {
+                // Find a representative date from the month to get the full week's days
+                const refDate = daysInMonth.find(d => getWeekId(d) === weekId)!;
+                const weekDays = getWeekDays(refDate);
+    
+                weekDays.forEach(dateOfWeek => {
+                    const dateString = dateOfWeek.toDateString();
+                    if (!processedDates.has(dateString)) {
+                        allDatesInWeeks.push(dateOfWeek);
+                        processedDates.add(dateString);
+                    }
+                });
+            });
+            
+            // Sort all collected dates chronologically.
+            allDatesInWeeks.sort((a,b) => a.getTime() - b.getTime());
+    
+            // 4. Map these dates to Day objects, pulling saved data from the main schedule.
+            const monthSchedule: Day[] = allDatesInWeeks.map(date => {
                 const weekId = getWeekId(date);
                 const dayData = schedule[weekId]?.find(d => new Date(d.date).toDateString() === date.toDateString());
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
-
+    
+            // 5. Calculate totals based on the full data collected.
             const totalHoursMonth = monthSchedule.reduce((acc, day) => {
                 if (day.status === DayStatus.Work) {
                     return acc + calculateHoursFromShift(day.shift);
                 }
                 return acc;
             }, 0);
-
-            const overtimeThreshold = 40 * (daysInMonth.length / 7); // ~40h/week
+    
+            // Overtime is based on 40h per week involved in the report.
+            const overtimeThreshold = weekIdsInMonth.size * 40;
             const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
-
+    
             await downloadMonthScheduleAsPdf({
                 monthDays: monthSchedule,
                 currentDate,
                 totalHours: totalHoursMonth,
                 overtimeHours: overtimeHoursMonth
             });
-
+    
         } catch (error) {
             console.error("Monthly PDF Download failed:", error);
             alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del mes.");

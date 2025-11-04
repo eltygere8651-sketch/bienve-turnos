@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
-import { getWeekTitle, getMonthTitle } from '../utils/dateUtils';
+import { getWeekTitle, getMonthTitle, getWeekId } from '../utils/dateUtils';
 import { LOGO_SVG_STRING_PDF } from '../constants';
 
 interface WeekPdfData {
@@ -29,7 +29,7 @@ export const svgToPngDataUrl = (svgString: string, width: number, height: number
     return new Promise((resolve, reject) => {
         const img = new Image();
         // Use btoa to handle SVG content properly in the data URL
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-t' });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
@@ -120,89 +120,91 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
 
 export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     const { monthDays, currentDate, totalHours, overtimeHours } = data;
-
     const doc = new jsPDF('p', 'mm', 'a4');
-
     await addHeader(doc);
-    
+
     doc.setFontSize(16);
     doc.setTextColor("#64748B");
     doc.text(`Horario Mensual: ${getMonthTitle(currentDate)}`, 15, 45);
 
-    const dayHeaders = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-    const margin = 15;
-    const cellWidth = (doc.internal.pageSize.getWidth() - 2 * margin) / 7;
-    const cellHeight = 25;
     let yPos = 60;
+    const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor("#334155");
-    dayHeaders.forEach((header, i) => {
-        doc.text(header, margin + i * cellWidth + (cellWidth / 2), yPos, { align: 'center' });
-    });
-    yPos += 5;
-
-    const firstDayOfMonth = monthDays[0].date;
-    let startDayOfWeek = firstDayOfMonth.getDay(); // 0=Sun, 1=Mon...
-    if (startDayOfWeek === 0) startDayOfWeek = 6; // Adjust Sunday to be the last day
-    else startDayOfWeek -= 1;
-
-    let currentDayIndex = 0;
-    
-    for (let row = 0; row < 6; row++) {
-        for (let col = 0; col < 7; col++) {
-            if ((row === 0 && col < startDayOfWeek) || currentDayIndex >= monthDays.length) {
-                continue; // Skip empty cells at the beginning/end of the month
-            }
-            
-            const day = monthDays[currentDayIndex];
-            const x = margin + col * cellWidth;
-            const y = yPos + row * cellHeight;
-
-            // Cell background color based on status
-            if (day.status === DayStatus.Vacation) {
-                doc.setFillColor(236, 252, 241); // Light Green
-                doc.rect(x, y, cellWidth, cellHeight, 'F');
-            } else if (day.status === DayStatus.Holiday) {
-                doc.setFillColor(239, 246, 255); // Light Blue
-                doc.rect(x, y, cellWidth, cellHeight, 'F');
-            }
-
-            doc.setDrawColor(203, 213, 225); // Grid lines color
-            doc.rect(x, y, cellWidth, cellHeight);
-
-            // Day number
-            doc.setFontSize(8);
-            doc.setTextColor(100, 116, 139);
-            doc.text(String(day.date.getDate()), x + cellWidth - 2, y + 4, { align: 'right' });
-
-            // Shift text
-            let statusText = day.shift || '';
-            if (day.status === DayStatus.Vacation) statusText = 'Vacaciones';
-            else if (day.status === DayStatus.Holiday) statusText = 'Festivo';
-            
-            doc.setFontSize(9);
-            doc.setFont('courier', 'normal');
-            doc.setTextColor(15, 23, 42);
-            doc.text(statusText, x + (cellWidth / 2), y + (cellHeight / 2), { align: 'center', maxWidth: cellWidth - 4 });
-
-            currentDayIndex++;
+    // Group days by their week ID
+    const weeks: { [weekId: string]: Day[] } = {};
+    monthDays.forEach(day => {
+        const weekId = getWeekId(day.date);
+        if (!weeks[weekId]) {
+            weeks[weekId] = [];
         }
+        weeks[weekId].push(day);
+    });
+
+    const sortedWeekIds = Object.keys(weeks).sort();
+
+    for (const weekId of sortedWeekIds) {
+        const weekDays = weeks[weekId];
+        if (weekDays.length === 0) continue;
+
+        if (yPos > 240) { // Check for page break before printing a new week
+            doc.addPage();
+            await addHeader(doc);
+            yPos = 40;
+        }
+
+        // Add Week Title
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor("#334155");
+        const weekTitle = getWeekTitle(weekDays[0].date); // Use first day of week for title
+        doc.text(weekTitle, 15, yPos);
+        yPos += 8;
+
+        // Add Day list for the week
+        doc.setFontSize(11);
+        doc.setFont('courier', 'normal');
+        doc.setTextColor("#0F172A");
+
+        weekDays.sort((a, b) => a.date.getTime() - b.date.getTime()); // Ensure days are sorted
+        
+        weekDays.forEach(day => {
+            const dayIndex = day.date.getUTCDay() === 0 ? 6 : day.date.getUTCDay() - 1;
+            const dayName = dayNames[dayIndex];
+            const dateStr = `${String(day.date.getUTCDate()).padStart(2, '0')}/${String(day.date.getUTCMonth() + 1).padStart(2, '0')}`;
+            
+            let statusText = '';
+            if (day.status === DayStatus.Vacation) {
+                statusText = "Vacaciones";
+            } else if (day.status === DayStatus.Holiday) {
+                statusText = "Festivo";
+            } else {
+                statusText = day.shift || 'Sin turno';
+            }
+            
+            const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
+            doc.text(line, 20, yPos);
+            yPos += 7;
+        });
+
+        yPos += 5; // Add a little space between weeks
     }
 
-    yPos += 6 * cellHeight + 10;
+    if (yPos > 260) {
+        doc.addPage();
+        await addHeader(doc);
+        yPos = 40;
+    }
     
     doc.setLineWidth(0.5);
-    doc.line(margin, yPos, doc.internal.pageSize.getWidth() - margin, yPos);
+    doc.line(15, yPos, doc.internal.pageSize.getWidth() - 15, yPos);
     yPos += 10;
-
+    
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155");
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, margin, yPos);
+    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 15, yPos);
     yPos += 8;
-    doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, margin, yPos);
+    doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 15, yPos);
 
     const monthId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     doc.save(`horario_mensual_${monthId}.pdf`);
