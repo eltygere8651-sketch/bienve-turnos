@@ -127,36 +127,18 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
+            // Step 1: Get all dates for the currently selected month.
             const daysInMonth = getDaysInMonth(currentDate);
-            const weekIdsInMonth = new Set<string>();
-            daysInMonth.forEach(dayInMonth => {
-                weekIdsInMonth.add(getWeekId(dayInMonth));
-            });
-    
-            const allDatesInWeeks: Date[] = [];
-            const processedDates = new Set<string>();
-    
-            Array.from(weekIdsInMonth).forEach(weekId => {
-                const refDate = daysInMonth.find(d => getWeekId(d) === weekId)!;
-                const weekDays = getWeekDays(refDate);
-    
-                weekDays.forEach(dateOfWeek => {
-                    const dateString = dateOfWeek.toDateString();
-                    if (!processedDates.has(dateString)) {
-                        allDatesInWeeks.push(dateOfWeek);
-                        processedDates.add(dateString);
-                    }
-                });
-            });
             
-            allDatesInWeeks.sort((a,b) => a.getTime() - b.getTime());
-    
-            const monthSchedule: Day[] = allDatesInWeeks.map(date => {
+            // Step 2: Create the schedule for the month by mapping over the days of the month.
+            // This ensures we only include days within the selected month, fixing the bug.
+            const monthSchedule: Day[] = daysInMonth.map(date => {
                 const weekId = getWeekId(date);
                 const dayData = schedule[weekId]?.find(d => new Date(d.date).toDateString() === date.toDateString());
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
-    
+
+            // Step 3: Calculate total hours for the month from the corrected schedule.
             const totalHoursMonth = monthSchedule.reduce((acc, day) => {
                 if (day.status === DayStatus.Work) {
                     return acc + calculateHoursFromShift(day.shift);
@@ -164,9 +146,12 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
+            // Step 4: Calculate the overtime threshold based on the number of unique weeks the month spans.
+            const weekIdsInMonth = new Set(daysInMonth.map(d => getWeekId(d)));
             const overtimeThreshold = weekIdsInMonth.size * 40;
             const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
     
+            // Step 5: Call the PDF generation service with the corrected data.
             await downloadMonthScheduleAsPdf({
                 monthDays: monthSchedule,
                 currentDate,
