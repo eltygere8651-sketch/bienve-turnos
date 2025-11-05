@@ -247,20 +247,28 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
-            // 5. Calculate overtime based on weekly totals *only for hours within the period*
+            // 5. Calculate net overtime based on weekly balances *only for hours within the period*.
+            // This implements an "hour bank" where undertime in one week is subtracted from overtime in another.
             const weeklyHoursMap = new Map<string, number>();
             periodDaysWithData.forEach(day => {
+                // Vacations and holidays are excluded from hour calculations, as requested.
                 if (day.status === DayStatus.Work) {
                     const weekId = getWeekId(day.date);
                     const hours = calculateHoursFromShift(day.shift);
                     weeklyHoursMap.set(weekId, (weeklyHoursMap.get(weekId) || 0) + hours);
                 }
             });
-    
-            let totalOvertimePeriod = 0;
-            for (const hours of weeklyHoursMap.values()) {
-                totalOvertimePeriod += Math.max(0, hours - 40);
+
+            let netOvertimeBalance = 0;
+            for (const weeklyTotal of weeklyHoursMap.values()) {
+                // Only factor in weeks where work was actually done to calculate the balance.
+                if (weeklyTotal > 0) {
+                   netOvertimeBalance += (weeklyTotal - 40);
+                }
             }
+
+            // The final overtime is the positive part of the balance, ensuring it doesn't go below zero.
+            const totalOvertimePeriod = Math.max(0, netOvertimeBalance);
     
             // 6. Collect days that have shifts for PDF display
             const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
