@@ -73,6 +73,9 @@ const App: React.FC = () => {
             const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === updatedDay.date.toISOString().slice(0, 10));
             if (dayIndex !== -1) {
                 newWeekDays[dayIndex] = updatedDay;
+            } else {
+                // If day is not found, it might be a new day for this week (e.g. from calendar picker)
+                newWeekDays.push(updatedDay);
             }
             return { ...prevSchedule, [weekId]: newWeekDays };
         });
@@ -165,7 +168,6 @@ const App: React.FC = () => {
             for (const weekId in activeWeeks) {
                 const daysForThisWeekInMonth = activeWeeks[weekId];
                 
-                // Part A: Sum total hours from ONLY the days within the month
                 totalHoursMonth += daysForThisWeekInMonth.reduce((acc: number, day: Day) => {
                     if (day.status === DayStatus.Work) {
                         return acc + calculateHoursFromShift(day.shift);
@@ -173,12 +175,8 @@ const App: React.FC = () => {
                     return acc;
                 }, 0);
     
-                // Part B: Calculate overtime based on the FULL 7 days of the week for accuracy.
-                // FIX: The previous method using `schedule[weekId]` was unreliable if the stored week data was incomplete.
-                // This new approach reconstructs the full week from the `scheduleMap` (which is a flattened, comprehensive
-                // list of all days) to guarantee an accurate calculation, especially for weeks spanning month boundaries.
-                const sampleDateForWeek = daysForThisWeekInMonth[0].date; // A date to identify the week
-                const fullWeekDaysDates = getWeekDays(sampleDateForWeek); // Get all 7 Date objects for that week
+                const sampleDateForWeek = daysForThisWeekInMonth[0].date;
+                const fullWeekDaysDates = getWeekDays(sampleDateForWeek);
                 
                 const totalHoursInFullWeek = fullWeekDaysDates.reduce((acc: number, date: Date) => {
                     const dayKey = date.toISOString().slice(0, 10);
