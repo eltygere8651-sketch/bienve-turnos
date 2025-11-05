@@ -48,66 +48,61 @@ const parseTimeToHours = (timeStr: string): number => {
     return num;
 };
 
+/**
+ * Parses a shift string (e.g., "12-16 20-C" or "12 16 20 C") into a list of shift parts.
+ * This implementation is robust and handles various user input styles.
+ */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
-    
-    // Pre-processing step to pair up adjacent, space-separated time values (e.g., "13:30 18:30" -> "13:30-18:30")
-    const initialTokens = shift.trim().split(/\s+/);
-    const pairedTokens = [];
-    for (let i = 0; i < initialTokens.length; i++) {
-        const current = initialTokens[i];
-        const next = initialTokens[i + 1];
 
-        const isCurrentTime = !isNaN(parseTimeToHours(current));
-        const isNextTime = next ? !isNaN(parseTimeToHours(next)) : false;
+    // Normalize string: remove spaces around hyphens, then split into potential time tokens.
+    const normalizedShift = shift.trim().replace(/\s*-\s*/g, '-');
+    const tokens = normalizedShift.split(/\s+/);
 
-        // If the current token and the next token are both valid time values, pair them into a single shift range.
-        if (isCurrentTime && isNextTime) {
-            pairedTokens.push(`${current}-${next}`);
-            i++; // Skip the next token as it has now been paired
-        } else {
-            pairedTokens.push(current);
+    const parts: ShiftPart[] = [];
+
+    // Process tokens. A shift part can be an explicit range "10-14" or an implicit pair "10 14".
+    for (let i = 0; i < tokens.length; i++) {
+        const currentToken = tokens[i];
+
+        // Case 1: Token is an explicit range (e.g., "10-14", "20-C").
+        if (currentToken.includes('-')) {
+            const timeRange = currentToken.split('-');
+            if (timeRange.length === 2) {
+                const start = parseTimeToHours(timeRange[0]);
+                const end = parseTimeToHours(timeRange[1]);
+
+                if (!isNaN(start) && !isNaN(end)) {
+                    let endTime = end;
+                    // Handle shifts crossing midnight (e.g., 22-06).
+                    if (endTime < start) {
+                        endTime += 24;
+                    }
+                    parts.push({ start: start, end: endTime });
+                }
+            }
+            // Silently ignore invalid ranges like "10-12-14" or "-12".
+        }
+        // Case 2: Token is a single number; check for a subsequent number to form an implicit pair (e.g., "10" followed by "14").
+        else {
+            const nextToken = tokens[i + 1];
+            // The next token must not be an explicit range itself.
+            if (nextToken && !nextToken.includes('-')) {
+                const start = parseTimeToHours(currentToken);
+                const end = parseTimeToHours(nextToken);
+
+                if (!isNaN(start) && !isNaN(end)) {
+                    let endTime = end;
+                    // Handle shifts crossing midnight.
+                    if (endTime < start) {
+                        endTime += 24;
+                    }
+                    parts.push({ start: start, end: endTime });
+                    i++; // Skip the next token as it has been processed as part of the pair.
+                }
+            }
         }
     }
-    const processedShift = pairedTokens.join(' ');
-    
-    // Normalize the shift string to remove spaces around hyphens, e.g., "10 - 14" becomes "10-14".
-    const normalizedShift = processedShift.replace(/\s*-\s*/g, '-');
-    const parts: ShiftPart[] = [];
-    const timeSegments = normalizedShift.trim().split(/\s+/);
-
-    timeSegments.forEach(segment => {
-        const timeRange = segment.split('-');
-        
-        let startStr = '';
-        let endStr = '';
-
-        switch (timeRange.length) {
-            case 2: // Standard format: HH-HH, HH:MM-HH, etc.
-                startStr = timeRange[0];
-                endStr = timeRange[1];
-                break;
-            case 4: // Assumes HH-MM-HH-MM format, e.g., 16-00-16-30
-                startStr = `${timeRange[0]}:${timeRange[1]}`;
-                endStr = `${timeRange[2]}:${timeRange[3]}`;
-                break;
-            default:
-                // We don't support other formats and will ignore invalid segments.
-                return;
-        }
-
-        const start = parseTimeToHours(startStr);
-        const end = parseTimeToHours(endStr);
-
-        if (!isNaN(start) && !isNaN(end)) {
-            let endTime = end;
-            // Handle shifts crossing midnight, e.g., 22-02 or 22-00-02-00
-            if (endTime < start) {
-                endTime += 24;
-            }
-            parts.push({ start: start, end: endTime });
-        }
-    });
 
     return parts;
 };
