@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
@@ -129,37 +130,83 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
+            // 1. Get all days for the currently viewed month
             const daysInMonth = getDaysInMonth(currentDate);
             
-            // Create a map of all scheduled days for efficient and robust lookup.
-            // This avoids potential issues with week-based lookups at month boundaries.
+            // 2. Create a map of all scheduled days for quick lookup
             const scheduleMap = new Map<string, Day>();
-            // FIX: Explicitly typing `day` as `Day` resolves a TypeScript inference issue
-            // where it was incorrectly being treated as `unknown`.
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
             });
     
-            const monthSchedule: Day[] = daysInMonth.map(date => {
+            // 3. Group the month's days by week
+            const weeksInMonth: { [weekId: string]: Day[] } = {};
+            daysInMonth.forEach(date => {
+                const weekId = getWeekId(date);
+                if (!weeksInMonth[weekId]) {
+                    weeksInMonth[weekId] = [];
+                }
                 const dayKey = date.toISOString().slice(0, 10);
                 const dayData = scheduleMap.get(dayKey);
-                return dayData || { date, shift: '', status: DayStatus.Work };
+                weeksInMonth[weekId].push(dayData || { date, shift: '', status: DayStatus.Work });
             });
-
-            const totalHoursMonth = monthSchedule.reduce((acc, day) => {
-                if (day.status === DayStatus.Work) {
-                    return acc + calculateHoursFromShift(day.shift);
-                }
-                return acc;
-            }, 0);
     
-            const weekIdsInMonth = new Set(daysInMonth.map(d => getWeekId(d)));
-            const overtimeThreshold = weekIdsInMonth.size * 40;
-            const overtimeHoursMonth = Math.max(0, totalHoursMonth - overtimeThreshold);
+            // 4. Filter for weeks that have activity
+            const activeWeeks: { [weekId: string]: Day[] } = {};
+            for (const weekId in weeksInMonth) {
+                const weekDaysInMonth = weeksInMonth[weekId];
+                const isActive = weekDaysInMonth.some(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
+                if (isActive) {
+                    activeWeeks[weekId] = weekDaysInMonth;
+                }
+            }
+    
+            // 5. Calculate totals by iterating through active weeks
+            let totalHoursMonth = 0;
+            let overtimeHoursMonth = 0;
+    
+            for (const weekId in activeWeeks) {
+                // Part A: Sum total hours from ONLY the days within the month
+                const daysForThisWeekInMonth = activeWeeks[weekId];
+                // FIX: Add explicit types for the accumulator (acc) and the current item (day)
+                // in the reduce function. This resolves TypeScript errors where 'day' was being
+                // inferred as 'unknown', causing subsequent property access and arithmetic errors.
+                totalHoursMonth += daysForThisWeekInMonth.reduce((acc: number, day: Day) => {
+                    if (day.status === DayStatus.Work) {
+                        return acc + calculateHoursFromShift(day.shift);
+                    }
+                    return acc;
+                }, 0);
+    
+                // Part B: Calculate overtime based on the FULL 7 days of the week to be accurate
+                const aDayInTheWeek = daysForThisWeekInMonth[0].date;
+                const full7DaysOfWeek = getWeekDays(aDayInTheWeek);
+                
+                const scheduleForFullWeek = schedule[weekId] || [];
+                const scheduleMapForFullWeek = new Map(scheduleForFullWeek.map(d => [new Date(d.date).toISOString().slice(0, 10), d]));
+                
+                const fullWeekData = full7DaysOfWeek.map(date => 
+                    scheduleMapForFullWeek.get(date.toISOString().slice(0, 10)) || { date, shift: '', status: DayStatus.Work }
+                );
+    
+                // FIX: Add explicit types for the accumulator (acc) and the current item (day)
+                // to ensure correct type inference and prevent calculation errors.
+                const totalHoursInFullWeek = fullWeekData.reduce((acc: number, day: Day) => {
+                     if (day.status === DayStatus.Work) {
+                        return acc + calculateHoursFromShift(day.shift);
+                    }
+                    return acc;
+                }, 0);
+    
+                overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
+            }
+            
+            // 6. Prepare data for the PDF
+            const monthScheduleForPdf = Object.values(activeWeeks).flat();
     
             await downloadMonthScheduleAsPdf({
-                monthDays: monthSchedule,
+                monthDays: monthScheduleForPdf,
                 currentDate,
                 totalHours: totalHoursMonth,
                 overtimeHours: overtimeHoursMonth

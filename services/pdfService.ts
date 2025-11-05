@@ -123,9 +123,12 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     const doc = new jsPDF('p', 'mm', 'a4');
     await addHeader(doc);
 
+    // Use the first day of the actual schedule data for the title to ensure accuracy
+    const displayDate = monthDays.length > 0 ? monthDays[0].date : currentDate;
+
     doc.setFontSize(16);
     doc.setTextColor("#64748B");
-    doc.text(`Horario Mensual: ${getMonthTitle(currentDate)}`, 15, 45);
+    doc.text(`Horario Mensual: ${getMonthTitle(displayDate)}`, 15, 45);
 
     let yPos = 60;
     const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -206,6 +209,6 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     yPos += 8;
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 15, yPos);
 
-    const monthId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    const monthId = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}`;
     doc.save(`horario_mensual_${monthId}.pdf`);
 };
