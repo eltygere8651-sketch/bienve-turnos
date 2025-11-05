@@ -135,72 +135,67 @@ const App: React.FC = () => {
         setIsDownloadingMonth(true);
         try {
             const daysInMonth = getDaysInMonth(currentDate);
-            
+            const reportMonth = currentDate.getMonth();
+    
+            // Create a comprehensive map of all known schedule days for easy lookup.
             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
             });
     
-            const weeksInMonth: { [weekId: string]: Day[] } = {};
-            daysInMonth.forEach(date => {
-                const weekId = getWeekId(date);
-                if (!weeksInMonth[weekId]) {
-                    weeksInMonth[weekId] = [];
-                }
+            // 1. Calculate Total Hours: Sum hours for every day that falls within the report's month.
+            // This is the most direct and correct way to get the monthly total.
+            const totalHoursMonth = daysInMonth.reduce((acc, date) => {
                 const dayKey = date.toISOString().slice(0, 10);
-                const dayData = scheduleMap.get(dayKey);
-                weeksInMonth[weekId].push(dayData || { date, shift: '', status: DayStatus.Work });
-            });
-    
-            const activeWeeks: { [weekId: string]: Day[] } = {};
-            for (const weekId in weeksInMonth) {
-                const weekDaysInMonth = weeksInMonth[weekId];
-                const isActive = weekDaysInMonth.some(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
-                if (isActive) {
-                    activeWeeks[weekId] = weekDaysInMonth;
+                const day = scheduleMap.get(dayKey);
+                if (day && day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
                 }
-            }
+                return acc;
+            }, 0);
     
-            let totalHoursMonth = 0;
+            // 2. Calculate Overtime Hours:
+            // Identify unique weeks that END in the current month and calculate their overtime.
             let overtimeHoursMonth = 0;
+            const processedWeekIds = new Set<string>();
     
-            for (const weekId in activeWeeks) {
-                const daysForThisWeekInMonth = activeWeeks[weekId];
-                
-                totalHoursMonth += daysForThisWeekInMonth.reduce((acc: number, day: Day) => {
-                    if (day.status === DayStatus.Work) {
-                        return acc + calculateHoursFromShift(day.shift);
-                    }
-                    return acc;
-                }, 0);
+            daysInMonth.forEach(dateInMonth => {
+                const weekId = getWeekId(dateInMonth);
+                if (processedWeekIds.has(weekId)) {
+                    return; // Avoid recalculating the same week.
+                }
     
-                const sampleDateForWeek = daysForThisWeekInMonth[0].date;
-                const fullWeekDaysDates = getWeekDays(sampleDateForWeek);
-                
-                const totalHoursInFullWeek = fullWeekDaysDates.reduce((acc: number, date: Date) => {
-                    const dayKey = date.toISOString().slice(0, 10);
-                    const day = scheduleMap.get(dayKey);
-                    if (day && day.status === DayStatus.Work) {
-                        return acc + calculateHoursFromShift(day.shift);
-                    }
-                    return acc;
-                }, 0);
+                const fullWeekDays = getWeekDays(dateInMonth);
+                const sundayOfWeek = fullWeekDays[6];
     
-                // FIX: A week's overtime belongs to the month where the week ends (i.e., where Sunday falls).
-                // This prevents double-counting overtime for weeks that span across two months.
-                const sundayOfWeek = fullWeekDaysDates[6]; // Sunday is the last day of the week array
-                const reportMonth = currentDate.getMonth();
-
+                // Only process weeks that end in the report's month to prevent double-counting.
                 if (sundayOfWeek.getMonth() === reportMonth) {
+                    const totalHoursInFullWeek = fullWeekDays.reduce((acc, dateOfWeek) => {
+                        const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                        const day = scheduleMap.get(dayKey);
+                        if (day && day.status === DayStatus.Work) {
+                            return acc + calculateHoursFromShift(day.shift);
+                        }
+                        return acc;
+                    }, 0);
+    
                     overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
                 }
-            }
-            
-            const monthScheduleForPdf = Object.values(activeWeeks).flat();
+                
+                processedWeekIds.add(weekId);
+            });
+    
+            // 3. Collect all days with actual shifts within the month for the PDF display.
+            const monthDaysForPdf = daysInMonth
+                .map(date => {
+                    const dayKey = date.toISOString().slice(0, 10);
+                    return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
+                })
+                .filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
     
             await downloadMonthScheduleAsPdf({
-                monthDays: monthScheduleForPdf,
+                monthDays: monthDaysForPdf,
                 currentDate,
                 totalHours: totalHoursMonth,
                 overtimeHours: overtimeHoursMonth
