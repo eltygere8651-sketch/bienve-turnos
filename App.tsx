@@ -187,7 +187,14 @@ const App: React.FC = () => {
                     return acc;
                 }, 0);
     
-                overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
+                // FIX: A week's overtime belongs to the month where the week ends (i.e., where Sunday falls).
+                // This prevents double-counting overtime for weeks that span across two months.
+                const sundayOfWeek = fullWeekDaysDates[6]; // Sunday is the last day of the week array
+                const reportMonth = currentDate.getMonth();
+
+                if (sundayOfWeek.getMonth() === reportMonth) {
+                    overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
+                }
             }
             
             const monthScheduleForPdf = Object.values(activeWeeks).flat();
