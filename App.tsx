@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
@@ -173,11 +174,16 @@ const App: React.FC = () => {
                 }, 0);
     
                 // Part B: Calculate overtime based on the FULL 7 days of the week for accuracy.
-                // FIX: Use the complete week data directly from the main schedule state to ensure an accurate overtime calculation.
-                // This is simpler and less prone to errors than reconstructing the week's data.
-                const fullWeekDataFromState = schedule[weekId] || [];
-                const totalHoursInFullWeek = fullWeekDataFromState.reduce((acc: number, day: Day) => {
-                    if (day.status === DayStatus.Work) {
+                // FIX: The previous method using `schedule[weekId]` was unreliable if the stored week data was incomplete.
+                // This new approach reconstructs the full week from the `scheduleMap` (which is a flattened, comprehensive
+                // list of all days) to guarantee an accurate calculation, especially for weeks spanning month boundaries.
+                const sampleDateForWeek = daysForThisWeekInMonth[0].date; // A date to identify the week
+                const fullWeekDaysDates = getWeekDays(sampleDateForWeek); // Get all 7 Date objects for that week
+                
+                const totalHoursInFullWeek = fullWeekDaysDates.reduce((acc: number, date: Date) => {
+                    const dayKey = date.toISOString().slice(0, 10);
+                    const day = scheduleMap.get(dayKey);
+                    if (day && day.status === DayStatus.Work) {
                         return acc + calculateHoursFromShift(day.shift);
                     }
                     return acc;
