@@ -145,7 +145,6 @@ const App: React.FC = () => {
             });
     
             // 1. Calculate Total Hours: Sum hours for every day that falls within the report's month.
-            // This is the most direct and correct way to get the monthly total.
             const totalHoursMonth = daysInMonth.reduce((acc, date) => {
                 const dayKey = date.toISOString().slice(0, 10);
                 const day = scheduleMap.get(dayKey);
@@ -155,9 +154,8 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
-            // 2. Calculate Overtime Hours:
-            // Identify unique weeks that END in the current month and calculate their overtime.
-            let overtimeHoursMonth = 0;
+            // 2. Calculate Net Overtime: Implements an "hour bank" by summing weekly overtime and subtracting undertime.
+            let netOvertimeBalance = 0;
             const processedWeekIds = new Set<string>();
     
             daysInMonth.forEach(dateInMonth => {
@@ -179,12 +177,20 @@ const App: React.FC = () => {
                         }
                         return acc;
                     }, 0);
-    
-                    overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
+
+                    // For weeks with recorded work, add their balance (positive for overtime,
+                    // negative for undertime) to the monthly total. This correctly handles compensation.
+                    // Weeks with zero hours (e.g., full vacation) are ignored and don't create a deficit.
+                    if (totalHoursInFullWeek > 0) {
+                        netOvertimeBalance += (totalHoursInFullWeek - 40);
+                    }
                 }
                 
                 processedWeekIds.add(weekId);
             });
+            
+            // The final overtime cannot be a negative value.
+            const finalOvertimeHoursMonth = Math.max(0, netOvertimeBalance);
     
             // 3. Collect all days with actual shifts within the month for the PDF display.
             const monthDaysForPdf = daysInMonth
@@ -198,7 +204,7 @@ const App: React.FC = () => {
                 monthDays: monthDaysForPdf,
                 currentDate,
                 totalHours: totalHoursMonth,
-                overtimeHours: overtimeHoursMonth
+                overtimeHours: finalOvertimeHoursMonth
             });
     
         } catch (error) {
