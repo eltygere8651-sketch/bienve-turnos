@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
@@ -132,12 +131,19 @@ const App: React.FC = () => {
         try {
             const daysInMonth = getDaysInMonth(currentDate);
             
-            // FIX: Switched to comparing dates using ISO strings (`.toISOString().slice(0, 10)`).
-            // This resolves a critical bug on mobile devices where `toDateString()` can produce a different format
-            // than on desktop, causing the lookup to fail and shifts to not appear in the downloaded PDF.
+            // Create a map of all scheduled days for efficient and robust lookup.
+            // This avoids potential issues with week-based lookups at month boundaries.
+            const scheduleMap = new Map<string, Day>();
+            // FIX: Explicitly typing `day` as `Day` resolves a TypeScript inference issue
+            // where it was incorrectly being treated as `unknown`.
+            Object.values(schedule).flat().forEach((day: Day) => {
+                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                scheduleMap.set(dayKey, day);
+            });
+    
             const monthSchedule: Day[] = daysInMonth.map(date => {
-                const weekId = getWeekId(date);
-                const dayData = schedule[weekId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === date.toISOString().slice(0, 10));
+                const dayKey = date.toISOString().slice(0, 10);
+                const dayData = scheduleMap.get(dayKey);
                 return dayData || { date, shift: '', status: DayStatus.Work };
             });
 
