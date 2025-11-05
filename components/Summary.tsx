@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { DownloadIcon, CalendarDownloadIcon } from './icons';
+import { DownloadIcon, CalendarDownloadIcon, DocumentTextIcon } from './icons';
 
 interface SummaryProps {
     totalHours: number;
@@ -8,6 +8,8 @@ interface SummaryProps {
     isDownloading: boolean;
     onDownloadMonth: () => void;
     isDownloadingMonth: boolean;
+    onOpenCustomPeriodModal: () => void;
+    isDownloadingCustomPeriod: boolean;
 }
 
 const Summary: React.FC<SummaryProps> = ({ 
@@ -17,6 +19,8 @@ const Summary: React.FC<SummaryProps> = ({
     isDownloading, 
     onDownloadMonth, 
     isDownloadingMonth,
+    onOpenCustomPeriodModal,
+    isDownloadingCustomPeriod
 }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -33,7 +37,7 @@ const Summary: React.FC<SummaryProps> = ({
         };
     }, []);
 
-    const isAnyDownloadInProgress = isDownloading || isDownloadingMonth;
+    const isAnyDownloadInProgress = isDownloading || isDownloadingMonth || isDownloadingCustomPeriod;
 
     return (
         <footer className="sticky bottom-0 bg-gray-800/80 backdrop-blur-sm border-t border-gray-700 p-3 shadow-top">
@@ -80,6 +84,14 @@ const Summary: React.FC<SummaryProps> = ({
                                 >
                                     <CalendarDownloadIcon className="w-5 h-5" />
                                     <span>{isDownloadingMonth ? 'Generando...' : 'Descargar Mes'}</span>
+                                </button>
+                                <button
+                                    onClick={() => { onOpenCustomPeriodModal(); setIsMenuOpen(false); }}
+                                    disabled={isDownloadingCustomPeriod}
+                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
+                                >
+                                    <DocumentTextIcon className="w-5 h-5" />
+                                    <span>{isDownloadingCustomPeriod ? 'Generando...' : 'Periodo Personalizado'}</span>
                                 </button>
                             </div>
                         </div>

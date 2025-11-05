@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf } from './services/pdfService';
+import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, downloadCustomPeriodPdf } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -12,6 +12,7 @@ import EditShiftModal from './components/EditShiftModal';
 import { useShiftTemplates } from './hooks/useShiftTemplates';
 import CalendarPickerModal from './components/CalendarPickerModal';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
+import CustomPeriodModal from './components/CustomPeriodModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 
@@ -42,7 +43,9 @@ const App: React.FC = () => {
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
+    const [isDownloadingCustomPeriod, setIsDownloadingCustomPeriod] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
 
     useEffect(() => {
         try {
@@ -178,9 +181,6 @@ const App: React.FC = () => {
                         return acc;
                     }, 0);
 
-                    // For weeks with recorded work, add their balance (positive for overtime,
-                    // negative for undertime) to the monthly total. This correctly handles compensation.
-                    // Weeks with zero hours (e.g., full vacation) are ignored and don't create a deficit.
                     if (totalHoursInFullWeek > 0) {
                         netOvertimeBalance += (totalHoursInFullWeek - 40);
                     }
@@ -189,10 +189,8 @@ const App: React.FC = () => {
                 processedWeekIds.add(weekId);
             });
             
-            // The final overtime cannot be a negative value.
             const finalOvertimeHoursMonth = Math.max(0, netOvertimeBalance);
     
-            // 3. Collect all days with actual shifts within the month for the PDF display.
             const monthDaysForPdf = daysInMonth
                 .map(date => {
                     const dayKey = date.toISOString().slice(0, 10);
@@ -212,6 +210,75 @@ const App: React.FC = () => {
             alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del mes.");
         } finally {
             setIsDownloadingMonth(false);
+        }
+    };
+    
+    const handleDownloadCustomPeriod = async (startDate: Date, endDate: Date) => {
+        setIsDownloadingCustomPeriod(true);
+        setIsCustomPeriodModalOpen(false);
+
+        try {
+            // 1. Get all dates in the range
+            const periodDates: Date[] = [];
+            let loopDate = new Date(startDate);
+            while (loopDate <= endDate) {
+                periodDates.push(new Date(loopDate));
+                loopDate.setDate(loopDate.getDate() + 1);
+            }
+    
+            // 2. Create a map of all scheduled days for efficient lookup
+            const scheduleMap = new Map<string, Day>();
+            Object.values(schedule).flat().forEach((day: Day) => {
+                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                scheduleMap.set(dayKey, day);
+            });
+    
+            // 3. Get the Day objects for the period, creating placeholders if none exist
+            const periodDaysWithData = periodDates.map(date => {
+                const dayKey = date.toISOString().slice(0, 10);
+                return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
+            });
+    
+            // 4. Calculate total hours *only* for days within the selected period
+            const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => {
+                if (day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
+                }
+                return acc;
+            }, 0);
+    
+            // 5. Calculate overtime based on weekly totals *only for hours within the period*
+            const weeklyHoursMap = new Map<string, number>();
+            periodDaysWithData.forEach(day => {
+                if (day.status === DayStatus.Work) {
+                    const weekId = getWeekId(day.date);
+                    const hours = calculateHoursFromShift(day.shift);
+                    weeklyHoursMap.set(weekId, (weeklyHoursMap.get(weekId) || 0) + hours);
+                }
+            });
+    
+            let totalOvertimePeriod = 0;
+            for (const hours of weeklyHoursMap.values()) {
+                totalOvertimePeriod += Math.max(0, hours - 40);
+            }
+    
+            // 6. Collect days that have shifts for PDF display
+            const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
+
+            // 7. Call PDF service with the accurately calculated data
+            await downloadCustomPeriodPdf({
+                periodDays: periodDaysForPdf,
+                startDate,
+                endDate,
+                totalHours: totalHoursPeriod,
+                overtimeHours: totalOvertimePeriod
+            });
+    
+        } catch (error) {
+            console.error("Custom Period PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del periodo personalizado.");
+        } finally {
+            setIsDownloadingCustomPeriod(false);
         }
     };
 
@@ -236,6 +303,8 @@ const App: React.FC = () => {
                 isDownloading={isDownloading}
                 onDownloadMonth={handleDownloadMonth}
                 isDownloadingMonth={isDownloadingMonth}
+                onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
+                isDownloadingCustomPeriod={isDownloadingCustomPeriod}
             />
             {editingDay && (
                 <EditShiftModal
@@ -260,6 +329,13 @@ const App: React.FC = () => {
                     onClose={() => setIsCalendarOpen(false)}
                     currentDate={currentDate}
                     onDateSelect={handleDateSelect}
+                />
+            )}
+            {isCustomPeriodModalOpen && (
+                <CustomPeriodModal
+                    isOpen={isCustomPeriodModalOpen}
+                    onClose={() => setIsCustomPeriodModalOpen(false)}
+                    onConfirm={handleDownloadCustomPeriod}
                 />
             )}
         </div>
