@@ -1,3 +1,4 @@
+
 import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
 import { getWeekTitle, getMonthTitle, getWeekId } from '../utils/dateUtils';
@@ -123,17 +124,15 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     const doc = new jsPDF('p', 'mm', 'a4');
     await addHeader(doc);
 
-    // Use the first day of the actual schedule data for the title to ensure accuracy
     const displayDate = monthDays.length > 0 ? monthDays[0].date : currentDate;
 
     doc.setFontSize(16);
     doc.setTextColor("#64748B");
     doc.text(`Horario Mensual: ${getMonthTitle(displayDate)}`, 15, 45);
 
-    let yPos = 60;
+    let yPos = 55; // Optimized starting position
     const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-    // Group days by their week ID
     const weeks: { [weekId: string]: Day[] } = {};
     monthDays.forEach(day => {
         const weekId = getWeekId(day.date);
@@ -149,26 +148,24 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
         const weekDays = weeks[weekId];
         if (weekDays.length === 0) continue;
 
-        if (yPos > 240) { // Check for page break before printing a new week
+        if (yPos > 250) { // Page break check
             doc.addPage();
             await addHeader(doc);
             yPos = 40;
         }
 
-        // Add Week Title
-        doc.setFontSize(12);
+        doc.setFontSize(11); // Smaller font for week title
         doc.setFont('helvetica', 'bold');
         doc.setTextColor("#334155");
-        const weekTitle = getWeekTitle(weekDays[0].date); // Use first day of week for title
+        const weekTitle = getWeekTitle(weekDays[0].date);
         doc.text(weekTitle, 15, yPos);
-        yPos += 8;
+        yPos += 6; // Reduced space after title
 
-        // Add Day list for the week
-        doc.setFontSize(11);
+        doc.setFontSize(9); // Smaller font for days
         doc.setFont('courier', 'normal');
         doc.setTextColor("#0F172A");
 
-        weekDays.sort((a, b) => a.date.getTime() - b.date.getTime()); // Ensure days are sorted
+        weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
         
         weekDays.forEach(day => {
             const dayIndex = day.date.getUTCDay() === 0 ? 6 : day.date.getUTCDay() - 1;
@@ -186,10 +183,10 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
             
             const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
             doc.text(line, 20, yPos);
-            yPos += 7;
+            yPos += 4.5; // Reduced line height
         });
 
-        yPos += 5; // Add a little space between weeks
+        yPos += 4; // Reduced space between weeks
     }
 
     if (yPos > 260) {

@@ -130,17 +130,14 @@ const App: React.FC = () => {
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
-            // 1. Get all days for the currently viewed month
             const daysInMonth = getDaysInMonth(currentDate);
             
-            // 2. Create a map of all scheduled days for quick lookup
             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
             });
     
-            // 3. Group the month's days by week
             const weeksInMonth: { [weekId: string]: Day[] } = {};
             daysInMonth.forEach(date => {
                 const weekId = getWeekId(date);
@@ -152,7 +149,6 @@ const App: React.FC = () => {
                 weeksInMonth[weekId].push(dayData || { date, shift: '', status: DayStatus.Work });
             });
     
-            // 4. Filter for weeks that have activity
             const activeWeeks: { [weekId: string]: Day[] } = {};
             for (const weekId in weeksInMonth) {
                 const weekDaysInMonth = weeksInMonth[weekId];
@@ -162,16 +158,13 @@ const App: React.FC = () => {
                 }
             }
     
-            // 5. Calculate totals by iterating through active weeks
             let totalHoursMonth = 0;
             let overtimeHoursMonth = 0;
     
             for (const weekId in activeWeeks) {
-                // Part A: Sum total hours from ONLY the days within the month
                 const daysForThisWeekInMonth = activeWeeks[weekId];
-                // FIX: Add explicit types for the accumulator (acc) and the current item (day)
-                // in the reduce function. This resolves TypeScript errors where 'day' was being
-                // inferred as 'unknown', causing subsequent property access and arithmetic errors.
+                
+                // Part A: Sum total hours from ONLY the days within the month
                 totalHoursMonth += daysForThisWeekInMonth.reduce((acc: number, day: Day) => {
                     if (day.status === DayStatus.Work) {
                         return acc + calculateHoursFromShift(day.shift);
@@ -179,21 +172,12 @@ const App: React.FC = () => {
                     return acc;
                 }, 0);
     
-                // Part B: Calculate overtime based on the FULL 7 days of the week to be accurate
-                const aDayInTheWeek = daysForThisWeekInMonth[0].date;
-                const full7DaysOfWeek = getWeekDays(aDayInTheWeek);
-                
-                const scheduleForFullWeek = schedule[weekId] || [];
-                const scheduleMapForFullWeek = new Map(scheduleForFullWeek.map(d => [new Date(d.date).toISOString().slice(0, 10), d]));
-                
-                const fullWeekData = full7DaysOfWeek.map(date => 
-                    scheduleMapForFullWeek.get(date.toISOString().slice(0, 10)) || { date, shift: '', status: DayStatus.Work }
-                );
-    
-                // FIX: Add explicit types for the accumulator (acc) and the current item (day)
-                // to ensure correct type inference and prevent calculation errors.
-                const totalHoursInFullWeek = fullWeekData.reduce((acc: number, day: Day) => {
-                     if (day.status === DayStatus.Work) {
+                // Part B: Calculate overtime based on the FULL 7 days of the week for accuracy.
+                // FIX: Use the complete week data directly from the main schedule state to ensure an accurate overtime calculation.
+                // This is simpler and less prone to errors than reconstructing the week's data.
+                const fullWeekDataFromState = schedule[weekId] || [];
+                const totalHoursInFullWeek = fullWeekDataFromState.reduce((acc: number, day: Day) => {
+                    if (day.status === DayStatus.Work) {
                         return acc + calculateHoursFromShift(day.shift);
                     }
                     return acc;
@@ -202,7 +186,6 @@ const App: React.FC = () => {
                 overtimeHoursMonth += Math.max(0, totalHoursInFullWeek - 40);
             }
             
-            // 6. Prepare data for the PDF
             const monthScheduleForPdf = Object.values(activeWeeks).flat();
     
             await downloadMonthScheduleAsPdf({
