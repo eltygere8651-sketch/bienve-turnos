@@ -4,8 +4,8 @@ export interface ShiftPart {
 }
 
 /**
- * Parses a time string (e.g., "12:30", "16.5", "C") into a decimal hour value.
- * This is a strict parser, ensuring the token represents a single point in time.
+ * Parses a time string (e.g., "12:30", "16.5", "16.30", "C") into a decimal hour value.
+ * This parser is now robust against different decimal notations for time.
  * @param timeStr The time string to parse.
  * @returns The time in hours as a float, or NaN if invalid.
  */
@@ -32,7 +32,6 @@ const parseTimeToHours = (timeStr: string): number => {
         const hours = Number(parts[0]);
         const minutes = Number(parts[1]);
 
-        // Allow hours up to 24 for end-of-day times like "24:00"
         if (!isNaN(hours) && hours >= 0 && hours <= 24 && !isNaN(minutes) && minutes >= 0 && minutes < 60) {
             if (hours === 24 && minutes > 0) return NaN; // 24:00 is valid, but 24:01 is not
             return hours + (minutes / 60);
@@ -40,7 +39,25 @@ const parseTimeToHours = (timeStr: string): number => {
         return NaN; // Invalid HH:MM format
     }
     
-    // Handles decimal (e.g., 12.5) and integer (e.g., 12) formats. Use Number() for stricter parsing than parseFloat().
+    // FIX: Handles decimal formats intelligently.
+    // Differentiates between "16.5" (16 and a half hours) and "16.30" (16 hours and 30 minutes).
+    if (normalizedStr.includes('.')) {
+        const parts = normalizedStr.split('.');
+        if (parts.length === 2) {
+            const hours = Number(parts[0]);
+            const fractionalPart = parts[1];
+            
+            // If fractional part has 2 digits (e.g., "30" in "16.30"), treat it as minutes.
+            if (fractionalPart.length === 2) {
+                const minutes = Number(fractionalPart);
+                if (!isNaN(hours) && hours >= 0 && hours < 24 && !isNaN(minutes) && minutes >= 0 && minutes < 60) {
+                    return hours + (minutes / 60);
+                }
+            }
+        }
+    }
+    
+    // Handles integer (e.g., 12) and single-digit decimal (e.g., 12.5) formats.
     const num = Number(normalizedStr);
     if (isNaN(num) || num < 0 || num > 24) { 
         return NaN;
