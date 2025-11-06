@@ -86,18 +86,19 @@ const App: React.FC = () => {
     }, [weekId, weekDays]);
     
     const { totalHours, overtimeHours } = useMemo(() => {
-        const isVacationWeek = weekDays.every(day => day.status === DayStatus.Vacation);
-        if(isVacationWeek) return { totalHours: 0, overtimeHours: 0};
-        
-        const total = weekDays.reduce((acc, day) => {
+        const workHours = weekDays.reduce((acc, day) => {
             if (day.status === DayStatus.Work) {
                 return acc + calculateHoursFromShift(day.shift);
             }
             return acc;
         }, 0);
-        
-        const overtime = Math.max(0, total - 40);
-        return { totalHours: total, overtimeHours: overtime };
+    
+        // Only calculate deficit for weeks that are meant for work.
+        // If all days are holiday/vacation, there is no deficit.
+        const isWorkWeek = weekDays.some(day => day.status === DayStatus.Work);
+        const overtime = isWorkWeek ? workHours - 40 : 0;
+    
+        return { totalHours: workHours, overtimeHours: overtime };
     }, [weekDays]);
 
     const handlePrevWeek = () => {
@@ -138,16 +139,13 @@ const App: React.FC = () => {
         setIsDownloadingMonth(true);
         try {
             const daysInMonth = getDaysInMonth(currentDate);
-            const reportMonth = currentDate.getMonth();
     
-            // Create a comprehensive map of all known schedule days for easy lookup.
             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
             });
     
-            // 1. Calculate Total Hours: Sum hours for every day that falls within the report's month.
             const totalHoursMonth = daysInMonth.reduce((acc, date) => {
                 const dayKey = date.toISOString().slice(0, 10);
                 const day = scheduleMap.get(dayKey);
@@ -157,39 +155,37 @@ const App: React.FC = () => {
                 return acc;
             }, 0);
     
-            // 2. Calculate Net Overtime: Implements an "hour bank" by summing weekly overtime and subtracting undertime.
-            let netOvertimeBalance = 0;
+            let overtimeBalanceMonth = 0.0;
             const processedWeekIds = new Set<string>();
     
             daysInMonth.forEach(dateInMonth => {
                 const weekId = getWeekId(dateInMonth);
                 if (processedWeekIds.has(weekId)) {
-                    return; // Avoid recalculating the same week.
+                    return;
                 }
     
                 const fullWeekDays = getWeekDays(dateInMonth);
-                const sundayOfWeek = fullWeekDays[6];
-    
-                // Only process weeks that end in the report's month to prevent double-counting.
-                if (sundayOfWeek.getMonth() === reportMonth) {
-                    const totalHoursInFullWeek = fullWeekDays.reduce((acc, dateOfWeek) => {
-                        const dayKey = dateOfWeek.toISOString().slice(0, 10);
-                        const day = scheduleMap.get(dayKey);
-                        if (day && day.status === DayStatus.Work) {
+                const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
+                    const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                    return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
+                });
+
+                const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
+
+                if (isWorkWeek) {
+                    const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
+                        if (day.status === DayStatus.Work) {
                             return acc + calculateHoursFromShift(day.shift);
                         }
                         return acc;
                     }, 0);
-
-                    if (totalHoursInFullWeek > 0) {
-                        netOvertimeBalance += (totalHoursInFullWeek - 40);
-                    }
+                    overtimeBalanceMonth += (workHoursInWeek - 40);
                 }
                 
                 processedWeekIds.add(weekId);
             });
             
-            const finalOvertimeHoursMonth = Math.max(0, netOvertimeBalance);
+            const totalOvertimeMonth = overtimeBalanceMonth;
     
             const monthDaysForPdf = daysInMonth
                 .map(date => {
@@ -202,7 +198,7 @@ const App: React.FC = () => {
                 monthDays: monthDaysForPdf,
                 currentDate,
                 totalHours: totalHoursMonth,
-                overtimeHours: finalOvertimeHoursMonth
+                overtimeHours: totalOvertimeMonth
             });
     
         } catch (error) {
@@ -218,7 +214,6 @@ const App: React.FC = () => {
         setIsCustomPeriodModalOpen(false);
 
         try {
-            // 1. Get all dates in the range
             const periodDates: Date[] = [];
             let loopDate = new Date(startDate);
             while (loopDate <= endDate) {
@@ -226,54 +221,57 @@ const App: React.FC = () => {
                 loopDate.setDate(loopDate.getDate() + 1);
             }
     
-            // 2. Create a map of all scheduled days for efficient lookup
             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
             });
     
-            // 3. Get the Day objects for the period, creating placeholders if none exist
             const periodDaysWithData = periodDates.map(date => {
                 const dayKey = date.toISOString().slice(0, 10);
                 return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
             });
     
-            // 4. Calculate total hours *only* for days within the selected period
             const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => {
-                if (day.status === DayStatus.Work) {
+                if (day && day.status === DayStatus.Work) {
                     return acc + calculateHoursFromShift(day.shift);
                 }
                 return acc;
             }, 0);
     
-            // 5. Calculate net overtime based on weekly balances *only for hours within the period*.
-            // This implements an "hour bank" where undertime in one week is subtracted from overtime in another.
-            const weeklyHoursMap = new Map<string, number>();
-            periodDaysWithData.forEach(day => {
-                // Vacations and holidays are excluded from hour calculations, as requested.
-                if (day.status === DayStatus.Work) {
-                    const weekId = getWeekId(day.date);
-                    const hours = calculateHoursFromShift(day.shift);
-                    weeklyHoursMap.set(weekId, (weeklyHoursMap.get(weekId) || 0) + hours);
+            const processedWeekIds = new Set<string>();
+            let overtimeBalancePeriod = 0.0;
+
+            periodDaysWithData.forEach(dayInPeriod => {
+                const weekId = getWeekId(dayInPeriod.date);
+                
+                if (!processedWeekIds.has(weekId)) {
+                    const fullWeekDays = getWeekDays(dayInPeriod.date);
+                    const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
+                        const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                        return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
+                    });
+
+                    const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
+
+                    if (isWorkWeek) {
+                        const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
+                            if (day.status === DayStatus.Work) {
+                                return acc + calculateHoursFromShift(day.shift);
+                            }
+                            return acc;
+                        }, 0);
+                        overtimeBalancePeriod += (workHoursInWeek - 40);
+                    }
+                    
+                    processedWeekIds.add(weekId);
                 }
             });
-
-            let netOvertimeBalance = 0;
-            for (const weeklyTotal of weeklyHoursMap.values()) {
-                // Only factor in weeks where work was actually done to calculate the balance.
-                if (weeklyTotal > 0) {
-                   netOvertimeBalance += (weeklyTotal - 40);
-                }
-            }
-
-            // The final overtime is the positive part of the balance, ensuring it doesn't go below zero.
-            const totalOvertimePeriod = Math.max(0, netOvertimeBalance);
+            
+            const totalOvertimePeriod = overtimeBalancePeriod;
     
-            // 6. Collect days that have shifts for PDF display
             const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
 
-            // 7. Call PDF service with the accurately calculated data
             await downloadCustomPeriodPdf({
                 periodDays: periodDaysForPdf,
                 startDate,
@@ -290,6 +288,48 @@ const App: React.FC = () => {
         }
     };
 
+    const handleGenerateShifts = useCallback(() => {
+        const shiftPatterns = [
+            { shift: '08-16', status: DayStatus.Work },
+            { shift: '10-18', status: DayStatus.Work },
+            { shift: '16-C', status: DayStatus.Work },
+            { shift: '12-16 20-C', status: DayStatus.Work },
+            { shift: '18-02', status: DayStatus.Work },
+            { shift: '09-17', status: DayStatus.Work },
+            { shift: '14-22', status: DayStatus.Work },
+            { shift: '', status: DayStatus.Work }, // Day off
+            { shift: '', status: DayStatus.Work }, // Day off (higher probability)
+            { shift: '', status: DayStatus.Work }, // Day off (higher probability)
+        ];
+
+        const rarePatterns = [
+            { shift: '', status: DayStatus.Holiday },
+            { shift: '', status: DayStatus.Vacation },
+        ];
+
+        const newWeekData = weekDays.map(day => {
+            let randomPattern;
+            // Make holidays and vacations rare
+            if (Math.random() < 0.1) { // 10% chance for a rare event
+                randomPattern = rarePatterns[Math.floor(Math.random() * rarePatterns.length)];
+            } else {
+                randomPattern = shiftPatterns[Math.floor(Math.random() * shiftPatterns.length)];
+            }
+
+            return {
+                date: day.date,
+                shift: randomPattern.shift,
+                status: randomPattern.status,
+            };
+        });
+
+        setSchedule(prevSchedule => ({
+            ...prevSchedule,
+            [weekId]: newWeekData,
+        }));
+    }, [weekId, weekDays]);
+
+
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
             <Header
@@ -297,6 +337,7 @@ const App: React.FC = () => {
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
+                onGenerateShifts={handleGenerateShifts}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 

@@ -1,18 +1,19 @@
 import React from 'react';
-import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from './icons';
+import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, SparklesIcon } from './icons';
 
 interface HeaderProps {
     currentWeekTitle: string;
     onPrevWeek: () => void;
     onNextWeek: () => void;
     onCalendarClick: () => void;
+    onGenerateShifts: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick }) => {
+const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick, onGenerateShifts }) => {
     
     return (
         <header className="bg-gray-800 shadow-md p-3 sm:p-4 sticky top-0 z-10">
-            <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 items-center gap-4">
+            <div className="max-w-7xl mx-auto grid grid-cols-3 items-center gap-4">
                 
                 {/* --- Columna Izquierda: Logo y Título --- */}
                 <div className="flex items-center space-x-2 sm:space-x-3">
@@ -23,7 +24,7 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                 </div>
                 
                 {/* --- Columna Central: Navegación de Fecha --- */}
-                <div className="flex items-center justify-center sm:justify-start col-start-2 sm:col-start-2">
+                <div className="flex items-center justify-center">
                     <button onClick={onPrevWeek} className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors duration-200" aria-label="Semana anterior">
                         <ChevronLeftIcon className="w-6 h-6" />
                     </button>
@@ -42,8 +43,17 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                     </button>
                 </div>
 
-                {/* --- Columna Derecha (espacio vacío) --- */}
-                <div className="hidden sm:block"></div>
+                {/* --- Columna Derecha: Acciones --- */}
+                <div className="flex justify-end items-center">
+                    <button
+                        onClick={onGenerateShifts}
+                        className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded-full transition-colors duration-200"
+                        aria-label="Generar turnos de prueba"
+                        title="Generar turnos de prueba"
+                    >
+                        <SparklesIcon className="w-6 h-6" />
+                    </button>
+                </div>
             </div>
         </header>
     );
