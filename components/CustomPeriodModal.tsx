@@ -13,14 +13,24 @@ const CustomPeriodModal: React.FC<CustomPeriodModalProps> = ({ isOpen, onClose, 
     const [error, setError] = useState('');
 
     const handleConfirm = () => {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
+        if (!startDate || !endDate) {
+            setError('Por favor, selecciona fechas de inicio y fin.');
+            return;
+        }
         
-        // Add time to end date to make it inclusive
+        // The HTML date input returns a string "YYYY-MM-DD".
+        // Parsing this with `new Date(string)` is unreliable as it can be treated as UTC or local time
+        // depending on the browser. To avoid ambiguity, we parse the components and use Date.UTC.
+        const [sY, sM, sD] = startDate.split('-').map(Number);
+        const [eY, eM, eD] = endDate.split('-').map(Number);
+
+        // Create date objects in UTC to represent the selected calendar days without timezone shifts.
+        const start = new Date(Date.UTC(sY, sM - 1, sD));
+        const end = new Date(Date.UTC(eY, eM - 1, eD));
+        
+        // Set time to the very end of the selected day to ensure the period is inclusive.
         end.setUTCHours(23, 59, 59, 999);
-        start.setUTCHours(0,0,0,0);
-
-
+        
         if (start > end) {
             setError('La fecha de inicio no puede ser posterior a la fecha de fin.');
             return;

@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
@@ -93,10 +94,13 @@ const App: React.FC = () => {
             return acc;
         }, 0);
     
-        // Only calculate deficit for weeks that are meant for work.
-        // If all days are holiday/vacation, there is no deficit.
-        const isWorkWeek = weekDays.some(day => day.status === DayStatus.Work);
-        const overtime = isWorkWeek ? workHours - 40 : 0;
+        const daysOff = weekDays.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+        // A standard work week is 40 hours with 2 days off. 
+        // Any holidays or vacation days beyond the standard 2 reduce the 40-hour target by 8 hours each.
+        const extraDaysOff = Math.max(0, daysOff - 2);
+        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+    
+        const overtime = workHours - weeklyTarget;
     
         return { totalHours: workHours, overtimeHours: overtime };
     }, [weekDays]);
@@ -179,7 +183,12 @@ const App: React.FC = () => {
                         }
                         return acc;
                     }, 0);
-                    overtimeBalanceMonth += (workHoursInWeek - 40);
+
+                    const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                    const extraDaysOff = Math.max(0, daysOff - 2);
+                    const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+
+                    overtimeBalanceMonth += (workHoursInWeek - weeklyTarget);
                 }
                 
                 processedWeekIds.add(weekId);
@@ -261,7 +270,12 @@ const App: React.FC = () => {
                             }
                             return acc;
                         }, 0);
-                        overtimeBalancePeriod += (workHoursInWeek - 40);
+
+                        const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                        const extraDaysOff = Math.max(0, daysOff - 2);
+                        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+
+                        overtimeBalancePeriod += (workHoursInWeek - weeklyTarget);
                     }
                     
                     processedWeekIds.add(weekId);
@@ -289,45 +303,76 @@ const App: React.FC = () => {
     };
 
     const handleGenerateShifts = useCallback(() => {
-        const shiftPatterns = [
-            { shift: '08-16', status: DayStatus.Work },
-            { shift: '10-18', status: DayStatus.Work },
-            { shift: '16-C', status: DayStatus.Work },
-            { shift: '12-16 20-C', status: DayStatus.Work },
-            { shift: '18-02', status: DayStatus.Work },
-            { shift: '09-17', status: DayStatus.Work },
-            { shift: '14-22', status: DayStatus.Work },
-            { shift: '', status: DayStatus.Work }, // Day off
-            { shift: '', status: DayStatus.Work }, // Day off (higher probability)
-            { shift: '', status: DayStatus.Work }, // Day off (higher probability)
+        const testData = [
+          // Semana del 29 de septiembre al 5 de octubre
+          { date: '2025-09-29', shift: '', status: DayStatus.Holiday },
+          { date: '2025-09-30', shift: '', status: DayStatus.Holiday },
+          { date: '2025-10-01', shift: '12-17 20-01', status: DayStatus.Work },
+          { date: '2025-10-02', shift: '13-17 20-23:30', status: DayStatus.Work },
+          { date: '2025-10-03', shift: '13-16:30 20-00', status: DayStatus.Work },
+          { date: '2025-10-04', shift: '12-16:30 20-00:30', status: DayStatus.Work },
+          { date: '2025-10-05', shift: '12-16 20-23:30', status: DayStatus.Work },
+          // Semana del 6 de octubre al 12 de octubre
+          { date: '2025-10-06', shift: '', status: DayStatus.Holiday },
+          { date: '2025-10-07', shift: '', status: DayStatus.Holiday },
+          { date: '2025-10-08', shift: '14-23:30', status: DayStatus.Work },
+          { date: '2025-10-09', shift: '14-23', status: DayStatus.Work },
+          { date: '2025-10-10', shift: '14-23', status: DayStatus.Work },
+          { date: '2025-10-11', shift: '13-17 20-01', status: DayStatus.Work },
+          { date: '2025-10-12', shift: '13-17 20-00', status: DayStatus.Work },
+          // Semana del 13 de octubre al 19 de octubre
+          { date: '2025-10-13', shift: '19-00', status: DayStatus.Work },
+          { date: '2025-10-14', shift: '19-00', status: DayStatus.Work },
+          { date: '2025-10-15', shift: '19-00', status: DayStatus.Work },
+          { date: '2025-10-16', shift: '11-16 20-00', status: DayStatus.Work },
+          { date: '2025-10-17', shift: '', status: DayStatus.Holiday },
+          { date: '2025-10-18', shift: '13-17 20-01', status: DayStatus.Work },
+          { date: '2025-10-19', shift: '13-17 20-00:30', status: DayStatus.Work },
+          // Semana del 20 de octubre al 26 de octubre
+          { date: '2025-10-20', shift: '14-23:30', status: DayStatus.Work },
+          { date: '2025-10-21', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-22', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-23', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-24', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-25', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-26', shift: '', status: DayStatus.Vacation },
+          // Semana del 27 de octubre al 2 de noviembre
+          { date: '2025-10-27', shift: '', status: DayStatus.Vacation },
+          { date: '2025-10-28', shift: '14-23:30', status: DayStatus.Work },
+          { date: '2025-10-29', shift: '14-23', status: DayStatus.Work },
+          { date: '2025-10-30', shift: '12-16:30 20-00', status: DayStatus.Work },
+          { date: '2025-10-31', shift: '19-00:30', status: DayStatus.Work },
+          { date: '2025-11-01', shift: '13-17 20-01', status: DayStatus.Work },
+          { date: '2025-11-02', shift: '13-17 20-23', status: DayStatus.Work },
         ];
-
-        const rarePatterns = [
-            { shift: '', status: DayStatus.Holiday },
-            { shift: '', status: DayStatus.Vacation },
-        ];
-
-        const newWeekData = weekDays.map(day => {
-            let randomPattern;
-            // Make holidays and vacations rare
-            if (Math.random() < 0.1) { // 10% chance for a rare event
-                randomPattern = rarePatterns[Math.floor(Math.random() * rarePatterns.length)];
-            } else {
-                randomPattern = shiftPatterns[Math.floor(Math.random() * shiftPatterns.length)];
+    
+        const newSchedule: Schedule = {};
+    
+        testData.forEach(item => {
+            // Use UTC to avoid timezone issues when parsing date strings
+            const [y, m, d] = item.date.split('-').map(Number);
+            const date = new Date(Date.UTC(y, m - 1, d));
+            const weekId = getWeekId(date);
+    
+            if (!newSchedule[weekId]) {
+                newSchedule[weekId] = [];
             }
-
-            return {
-                date: day.date,
-                shift: randomPattern.shift,
-                status: randomPattern.status,
-            };
+    
+            newSchedule[weekId].push({
+                date,
+                shift: item.shift,
+                status: item.status,
+            });
         });
-
-        setSchedule(prevSchedule => ({
-            ...prevSchedule,
-            [weekId]: newWeekData,
-        }));
-    }, [weekId, weekDays]);
+    
+        setSchedule(newSchedule);
+    
+        // Set current date to the beginning of the test period
+        const [y, m, d] = testData[0].date.split('-').map(Number);
+        setCurrentDate(new Date(Date.UTC(y, m - 1, d)));
+        
+        alert('Datos de prueba generados para el periodo del 29 de septiembre al 2 de noviembre de 2025.');
+    }, []);
 
 
     return (

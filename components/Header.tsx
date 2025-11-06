@@ -48,8 +48,8 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                     <button
                         onClick={onGenerateShifts}
                         className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-gray-700 rounded-full transition-colors duration-200"
-                        aria-label="Generar turnos de prueba"
-                        title="Generar turnos de prueba"
+                        aria-label="Generar datos de ejemplo"
+                        title="Generar datos de ejemplo"
                     >
                         <SparklesIcon className="w-6 h-6" />
                     </button>

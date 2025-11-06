@@ -83,14 +83,14 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     
     await addHeader(doc);
     
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.setTextColor("#64748B");
     doc.text(`Resumen Semanal: ${getWeekTitle(currentDate)}`, 15, 45);
 
-    let yPos = 60;
+    let yPos = 55;
     const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor("#0F172A");
     doc.setFont('courier', 'normal');
 
@@ -108,20 +108,20 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
             statusText = day.shift || 'Sin turno';
         }
         doc.text(`${dayNames[index].padEnd(11)}: ${statusText}`, 20, yPos);
-        yPos += 7;
+        yPos += 6.5;
     });
 
-    yPos += 10;
+    yPos += 8;
     
     doc.setLineWidth(0.5);
     doc.line(20, yPos, 190, yPos);
-    yPos += 10;
+    yPos += 8;
     
-    doc.setFontSize(14);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155"); // Dark text color for totals
     doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 20, yPos);
-    yPos += 8;
+    yPos += 7;
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 20, yPos);
     
     const weekId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
@@ -135,11 +135,11 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
 
     const displayDate = monthDays.length > 0 ? monthDays[0].date : currentDate;
 
-    doc.setFontSize(16);
+    doc.setFontSize(15);
     doc.setTextColor("#64748B");
     doc.text(`Horario Mensual: ${getMonthTitle(displayDate)}`, 15, 45);
 
-    let yPos = 55; // Optimized starting position
+    let yPos = 50;
     const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
     const weeks: { [weekId: string]: Day[] } = {};
@@ -157,20 +157,20 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
         const weekDays = weeks[weekId];
         if (weekDays.length === 0) continue;
 
-        if (yPos > 250) { // Page break check
+        if (yPos > 275) { // Page break check
             doc.addPage();
             await addHeader(doc);
             yPos = 40;
         }
 
-        doc.setFontSize(11); // Smaller font for week title
+        doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor("#334155");
         const weekTitle = getWeekTitle(weekDays[0].date);
         doc.text(weekTitle, 15, yPos);
-        yPos += 6; // Reduced space after title
+        yPos += 5;
 
-        doc.setFontSize(9); // Smaller font for days
+        doc.setFontSize(8);
         doc.setFont('courier', 'normal');
         doc.setTextColor("#0F172A");
 
@@ -192,13 +192,13 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
             
             const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
             doc.text(line, 20, yPos);
-            yPos += 4.5; // Reduced line height
+            yPos += 4;
         });
 
-        yPos += 4; // Reduced space between weeks
+        yPos += 3;
     }
 
-    if (yPos > 260) {
+    if (yPos > 275) {
         doc.addPage();
         await addHeader(doc);
         yPos = 40;
@@ -206,13 +206,13 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, doc.internal.pageSize.getWidth() - 15, yPos);
-    yPos += 10;
+    yPos += 8;
     
-    doc.setFontSize(14);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155");
     doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 15, yPos);
-    yPos += 8;
+    yPos += 7;
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 15, yPos);
 
     const monthId = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}`;
@@ -230,11 +230,11 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     const title = `Horario: ${formattedStartDate} - ${formattedEndDate}`;
     const periodId = `${startDate.toISOString().slice(0, 10)}_a_${endDate.toISOString().slice(0, 10)}`;
 
-    doc.setFontSize(16);
+    doc.setFontSize(15);
     doc.setTextColor("#64748B");
     doc.text(title, 15, 45);
 
-    let yPos = 55;
+    let yPos = 50;
     const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
     const weeks: { [weekId: string]: Day[] } = {};
@@ -252,20 +252,20 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
         const weekDays = weeks[weekId];
         if (weekDays.length === 0) continue;
 
-        if (yPos > 250) { // Page break check
+        if (yPos > 275) { // Page break check
             doc.addPage();
             await addHeader(doc);
             yPos = 40;
         }
 
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor("#334155");
         const weekTitle = getWeekTitle(weekDays[0].date);
         doc.text(weekTitle, 15, yPos);
-        yPos += 6;
+        yPos += 5;
 
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         doc.setFont('courier', 'normal');
         doc.setTextColor("#0F172A");
 
@@ -287,13 +287,13 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
             
             const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
             doc.text(line, 20, yPos);
-            yPos += 4.5;
+            yPos += 4;
         });
 
-        yPos += 4;
+        yPos += 3;
     }
 
-    if (yPos > 260) {
+    if (yPos > 275) {
         doc.addPage();
         await addHeader(doc);
         yPos = 40;
@@ -301,13 +301,13 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, doc.internal.pageSize.getWidth() - 15, yPos);
-    yPos += 10;
+    yPos += 8;
     
-    doc.setFontSize(14);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155");
     doc.text(`Total de Horas (en periodo): ${totalHours.toFixed(2)}`, 15, yPos);
-    yPos += 8;
+    yPos += 7;
     doc.text(`Horas Extra (calculadas en periodo): ${overtimeHours.toFixed(2)}`, 15, yPos);
     
     doc.save(`horario_periodo_${periodId}.pdf`);
