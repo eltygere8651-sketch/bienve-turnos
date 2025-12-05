@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 
 // FIX: Updated component to accept all standard SVG props and render a <title> element for accessibility.
@@ -103,7 +104,7 @@ export const SunIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string 
 export const StarIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ className, title, ...props }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"} {...props}>
     {title && <title>{title}</title>}
-    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.32 1.011l-4.218 3.87a.563.563 0 00-.162.521l1.257 5.273c.099.418-.36.79-.746.592L12 18.225a.563.563 0 00-.53 0l-4.945 2.926c-.386.228-.845-.174-.746-.592l1.257-5.273a.563.563 0 00-.162-.521l-4.218-3.87c-.38-.348-.179-.971.32-1.011l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.32 1.011l-4.218 3.87a.563.563 0 00-.162.521l1.257 5.273c.099.418-.36.79-.746.592L12 18.225a.563.563 0 00-.53 0l-4.945 2.926c-.386.228-.845-.174-.746-.592l1.257-5.273a.563.563 0 00-.162.521l-4.218-3.87c-.38-.348-.179-.971.32-1.011l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
   </svg>
 );
 
@@ -157,5 +158,12 @@ export const SparklesIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: st
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"} {...props}>
         {title && <title>{title}</title>}
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.553L16.5 21.75l-.398-1.197a3.375 3.375 0 00-2.456-2.456L12.75 18l1.197-.398a3.375 3.375 0 002.456-2.456L16.5 14.25l.398 1.197a3.375 3.375 0 002.456 2.456l1.197.398-1.197.398a3.375 3.375 0 00-2.456 2.456z" />
+    </svg>
+);
+
+export const LogoutIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ className, title, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"} {...props}>
+        {title && <title>{title}</title>}
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
     </svg>
 );

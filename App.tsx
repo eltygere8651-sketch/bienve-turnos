@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
@@ -14,10 +15,17 @@ import { useShiftTemplates } from './hooks/useShiftTemplates';
 import CalendarPickerModal from './components/CalendarPickerModal';
 import ManageTemplatesModal from './components/ManageTemplatesModal';
 import CustomPeriodModal from './components/CustomPeriodModal';
+import Login from './components/Login';
+import ConfirmModal from './components/ConfirmModal';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
+const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
 const App: React.FC = () => {
+    const [isAuthenticated, setIsAuthenticated] = useState(() => {
+        return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
+    });
+
     const [currentDate, setCurrentDate] = useState(new Date());
     const [schedule, setSchedule] = useState<Schedule>(() => {
         try {
@@ -47,7 +55,12 @@ const App: React.FC = () => {
     const [isDownloadingCustomPeriod, setIsDownloadingCustomPeriod] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
+    const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
+    useEffect(() => {
+        localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
+    }, [isAuthenticated]);
+    
     useEffect(() => {
         try {
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
@@ -302,78 +315,18 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerateShifts = useCallback(() => {
-        const testData = [
-          // Semana del 29 de septiembre al 5 de octubre
-          { date: '2025-09-29', shift: '', status: DayStatus.Holiday },
-          { date: '2025-09-30', shift: '', status: DayStatus.Holiday },
-          { date: '2025-10-01', shift: '12-17 20-01', status: DayStatus.Work },
-          { date: '2025-10-02', shift: '13-17 20-23:30', status: DayStatus.Work },
-          { date: '2025-10-03', shift: '13-16:30 20-00', status: DayStatus.Work },
-          { date: '2025-10-04', shift: '12-16:30 20-00:30', status: DayStatus.Work },
-          { date: '2025-10-05', shift: '12-16 20-23:30', status: DayStatus.Work },
-          // Semana del 6 de octubre al 12 de octubre
-          { date: '2025-10-06', shift: '', status: DayStatus.Holiday },
-          { date: '2025-10-07', shift: '', status: DayStatus.Holiday },
-          { date: '2025-10-08', shift: '14-23:30', status: DayStatus.Work },
-          { date: '2025-10-09', shift: '14-23', status: DayStatus.Work },
-          { date: '2025-10-10', shift: '14-23', status: DayStatus.Work },
-          { date: '2025-10-11', shift: '13-17 20-01', status: DayStatus.Work },
-          { date: '2025-10-12', shift: '13-17 20-00', status: DayStatus.Work },
-          // Semana del 13 de octubre al 19 de octubre
-          { date: '2025-10-13', shift: '19-00', status: DayStatus.Work },
-          { date: '2025-10-14', shift: '19-00', status: DayStatus.Work },
-          { date: '2025-10-15', shift: '19-00', status: DayStatus.Work },
-          { date: '2025-10-16', shift: '11-16 20-00', status: DayStatus.Work },
-          { date: '2025-10-17', shift: '', status: DayStatus.Holiday },
-          { date: '2025-10-18', shift: '13-17 20-01', status: DayStatus.Work },
-          { date: '2025-10-19', shift: '13-17 20-00:30', status: DayStatus.Work },
-          // Semana del 20 de octubre al 26 de octubre
-          { date: '2025-10-20', shift: '14-23:30', status: DayStatus.Work },
-          { date: '2025-10-21', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-22', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-23', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-24', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-25', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-26', shift: '', status: DayStatus.Vacation },
-          // Semana del 27 de octubre al 2 de noviembre
-          { date: '2025-10-27', shift: '', status: DayStatus.Vacation },
-          { date: '2025-10-28', shift: '14-23:30', status: DayStatus.Work },
-          { date: '2025-10-29', shift: '14-23', status: DayStatus.Work },
-          { date: '2025-10-30', shift: '12-16:30 20-00', status: DayStatus.Work },
-          { date: '2025-10-31', shift: '19-00:30', status: DayStatus.Work },
-          { date: '2025-11-01', shift: '13-17 20-01', status: DayStatus.Work },
-          { date: '2025-11-02', shift: '13-17 20-23', status: DayStatus.Work },
-        ];
-    
-        const newSchedule: Schedule = {};
-    
-        testData.forEach(item => {
-            // Use UTC to avoid timezone issues when parsing date strings
-            const [y, m, d] = item.date.split('-').map(Number);
-            const date = new Date(Date.UTC(y, m - 1, d));
-            const weekId = getWeekId(date);
-    
-            if (!newSchedule[weekId]) {
-                newSchedule[weekId] = [];
-            }
-    
-            newSchedule[weekId].push({
-                date,
-                shift: item.shift,
-                status: item.status,
-            });
-        });
-    
-        setSchedule(newSchedule);
-    
-        // Set current date to the beginning of the test period
-        const [y, m, d] = testData[0].date.split('-').map(Number);
-        setCurrentDate(new Date(Date.UTC(y, m - 1, d)));
-        
-        alert('Datos de prueba generados para el periodo del 29 de septiembre al 2 de noviembre de 2025.');
-    }, []);
+    const handleLogin = () => {
+        setIsAuthenticated(true);
+    };
 
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        setIsLogoutModalOpen(false);
+    };
+
+    if (!isAuthenticated) {
+        return <Login onLogin={handleLogin} />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
@@ -382,7 +335,7 @@ const App: React.FC = () => {
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
-                onGenerateShifts={handleGenerateShifts}
+                onLogout={() => setIsLogoutModalOpen(true)}
             />
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 
@@ -430,6 +383,16 @@ const App: React.FC = () => {
                     isOpen={isCustomPeriodModalOpen}
                     onClose={() => setIsCustomPeriodModalOpen(false)}
                     onConfirm={handleDownloadCustomPeriod}
+                />
+            )}
+            {isLogoutModalOpen && (
+                <ConfirmModal
+                    isOpen={isLogoutModalOpen}
+                    title="Cerrar Sesión"
+                    message="¿Estás seguro de que quieres cerrar la sesión?"
+                    onConfirm={handleLogout}
+                    onCancel={() => setIsLogoutModalOpen(false)}
+                    confirmText="Cerrar Sesión"
                 />
             )}
         </div>
