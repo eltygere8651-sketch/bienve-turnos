@@ -60,6 +60,8 @@ const App: React.FC = () => {
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
+    const unsubscribeRef = useRef<(() => void) | null>(null);
+
     const handleCloudError = useCallback((error: any) => {
         setSyncStatus('error');
         setCloudError("Error de nube.");
@@ -76,7 +78,8 @@ const App: React.FC = () => {
             const success = await FirestoreService.initFirestore(config);
             setIsCloudConnected(success);
             if (success) {
-                FirestoreService.subscribeToSchedule((cloudSchedule) => {
+                if (unsubscribeRef.current) unsubscribeRef.current();
+                unsubscribeRef.current = FirestoreService.subscribeToSchedule((cloudSchedule) => {
                     setSchedule(cloudSchedule);
                     setSyncStatus('success');
                 }, handleCloudError);
@@ -114,6 +117,15 @@ const App: React.FC = () => {
         setEditingDay(null);
     }, [weekId, weekDays, isCloudConnected, handleCloudError]);
 
+    const handleManualUpload = async () => {
+        if (!isCloudConnected) return;
+        setSyncStatus('syncing');
+        try {
+            await FirestoreService.saveScheduleToCloud(schedule);
+            setSyncStatus('success');
+        } catch (e) { handleCloudError(e); }
+    };
+
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
         const daysOff = weekDays.filter(d => d.status !== DayStatus.Work).length;
@@ -132,7 +144,6 @@ const App: React.FC = () => {
         });
 
         const total = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        // Simplificado para el reporte mensual
         await downloadMonthScheduleAsPdf({ monthDays, currentDate, totalHours: total, overtimeHours: total - (160) });
         setIsDownloadingMonth(false);
     };
@@ -169,6 +180,7 @@ const App: React.FC = () => {
                 cloudError={cloudError}
                 onConfigureApi={() => setShowApiKeyModal(true)}
                 onForceSync={() => initializeCloud()}
+                onManualUpload={handleManualUpload}
             />
             <main className="flex-grow py-6 overflow-x-hidden">
                 <WeekView days={weekDays} onEditDay={setEditingDay} />
