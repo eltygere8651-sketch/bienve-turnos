@@ -69,7 +69,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave, onCancel }) => {
                             Ayuda Rápida
                         </h4>
                         <p className="text-gray-300 text-[11px] leading-relaxed">
-                            Copia el código de tu consola de Firebase (Ajustes -> Tus aplicaciones) y pégalo aquí debajo. La sincronización será automática.
+                            Copia el código de tu consola de Firebase (Ajustes &rarr; Tus aplicaciones) y pégalo aquí debajo. La sincronización será automática.
                         </p>
                     </div>
 

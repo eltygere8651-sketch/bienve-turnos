@@ -134,7 +134,6 @@ const App: React.FC = () => {
         return () => { if (unsubscribeRef.current) unsubscribeRef.current(); };
     }, [initializeCloud]);
 
-    // Subida automática al modificar (debounced)
     useEffect(() => {
         if (!isCloudConnected || isInitialLoadRef.current || syncStatus === 'error') return;
 
