@@ -1,5 +1,5 @@
 
-export const API_KEYS_STORAGE_KEY = 'bienveAppApiKeys';
+export const API_KEYS_STORAGE_KEY = 'bienve_cloud_config_v3';
 
 export interface ApiKeys {
     clientId: string;
@@ -8,37 +8,50 @@ export interface ApiKeys {
 
 export const saveApiKeys = (keys: ApiKeys): void => {
     try {
-        localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
+        if (!keys.apiKey || keys.apiKey.trim() === '') return;
+        
+        // Guardamos tanto en el objeto estándar como en un backup por si acaso
+        const data = JSON.stringify(keys);
+        localStorage.setItem(API_KEYS_STORAGE_KEY, data);
+        localStorage.setItem(API_KEYS_STORAGE_KEY + '_backup', data);
+        
+        console.log("Configuración de nube guardada con éxito.");
     } catch (error) {
-        console.error("Failed to save API keys to localStorage", error);
+        console.error("Error al guardar configuración en el dispositivo:", error);
     }
 };
 
 export const getApiKeys = (): ApiKeys | null => {
     try {
-        const storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
+        let storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
+        
+        // Si falló la principal, intentamos el backup
+        if (!storedKeys) {
+            storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY + '_backup');
+        }
+
         if (storedKeys) {
             const parsed = JSON.parse(storedKeys);
-            if (parsed.clientId && parsed.apiKey) {
+            // Verificación estricta de que contiene datos de Firebase
+            if (parsed && parsed.apiKey && (parsed.apiKey.includes('projectId') || parsed.apiKey.includes('apiKey'))) {
                 return parsed;
             }
         }
-        return null;
     } catch (error) {
-        console.error("Failed to retrieve API keys from localStorage", error);
-        return null;
+        console.error("Error al recuperar configuración del dispositivo:", error);
     }
+    return null;
 };
 
 export const areKeysSet = (): boolean => {
-    const keys = getApiKeys();
-    return !!(keys && keys.clientId && keys.apiKey);
+    return getApiKeys() !== null;
 };
 
 export const clearApiKeys = (): void => {
     try {
         localStorage.removeItem(API_KEYS_STORAGE_KEY);
+        localStorage.removeItem(API_KEYS_STORAGE_KEY + '_backup');
     } catch (error) {
-        console.error("Failed to clear API keys from localStorage", error);
+        console.error("Error al borrar configuración:", error);
     }
 };

@@ -33,7 +33,12 @@ const Header: React.FC<HeaderProps> = ({
     const [copied, setCopied] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Cerrar menú al hacer clic fuera
+    // Verificamos si hay llaves de forma directa para evitar re-renders innecesarios
+    const hasKeys = useMemo(() => {
+        const keys = getApiKeys();
+        return !!(keys && keys.apiKey);
+    }, [isCloudConnected, syncStatus]); // Re-evaluamos solo en cambios de estado de nube
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -44,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const { consoleUrl, isDatabaseMissing, isPermissionDenied, hasKeys } = useMemo(() => {
+    const { consoleUrl, isDatabaseMissing, isPermissionDenied } = useMemo(() => {
         const keys = getApiKeys();
         if (keys && keys.apiKey) {
             try {
@@ -63,12 +68,11 @@ const Header: React.FC<HeaderProps> = ({
                 return { 
                     consoleUrl: url,
                     isDatabaseMissing: isMissing,
-                    isPermissionDenied: isDenied,
-                    hasKeys: true
+                    isPermissionDenied: isDenied
                 };
-            } catch (e) { return { consoleUrl: null, isDatabaseMissing: false, isPermissionDenied: false, hasKeys: false }; }
+            } catch (e) { return { consoleUrl: null, isDatabaseMissing: false, isPermissionDenied: false }; }
         }
-        return { consoleUrl: null, isDatabaseMissing: false, isPermissionDenied: false, hasKeys: false };
+        return { consoleUrl: null, isDatabaseMissing: false, isPermissionDenied: false };
     }, [cloudError]);
 
     const securityRules = `rules_version = '2';
@@ -101,51 +105,48 @@ service cloud.firestore {
                             <div className="relative" ref={menuRef}>
                                 <button 
                                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                                    className="p-2 rounded-xl bg-gray-900/50 border border-gray-700 hover:bg-gray-700 transition-colors flex items-center justify-center min-w-[44px] min-h-[44px]"
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all active:scale-95 ${
+                                        syncStatus === 'error' ? 'bg-red-500/20 border-red-500' : 'bg-gray-900/50 border-gray-700'
+                                    }`}
                                 >
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-300">Nube</span>
                                     {syncStatus === 'syncing' ? (
-                                        <ArrowPathIcon className="w-6 h-6 text-blue-400 animate-spin" />
+                                        <ArrowPathIcon className="w-5 h-5 text-blue-400 animate-spin" />
                                     ) : syncStatus === 'success' ? (
-                                        <CheckCircleIcon className="w-6 h-6 text-green-500" />
+                                        <CheckCircleIcon className="w-5 h-5 text-green-500" />
+                                    ) : syncStatus === 'idle' ? (
+                                        <ArrowPathIcon className="w-5 h-5 text-gray-500" />
                                     ) : (
-                                        <ExclamationCircleIcon className="w-6 h-6 text-red-500 animate-pulse" />
+                                        <ExclamationCircleIcon className="w-5 h-5 text-red-500 animate-pulse" />
                                     )}
                                 </button>
 
-                                {/* Menú Desplegable (Clic) */}
                                 {isMenuOpen && (
                                     <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-3 w-72 bg-gray-900 text-white text-[11px] p-5 rounded-2xl shadow-2xl border border-gray-700 z-50 animate-fade-in">
                                         <p className="font-bold text-gray-100 mb-2 uppercase tracking-tighter text-xs text-center border-b border-gray-800 pb-2">
-                                            Estado de la Nube
+                                            Sincronización
                                         </p>
                                         
                                         <div className="mb-4 text-center">
                                             {syncStatus === 'success' ? (
-                                                <p className="text-green-400 mb-2 font-bold">✅ Sincronizado Correctamente</p>
+                                                <p className="text-green-400 mb-2 font-bold">✅ Datos Sincronizados</p>
                                             ) : syncStatus === 'syncing' ? (
-                                                <p className="text-blue-400 mb-2">⏳ Sincronizando datos...</p>
+                                                <p className="text-blue-400 mb-2 font-bold animate-pulse">⏳ Subiendo...</p>
                                             ) : (
-                                                <p className="text-red-400 mb-2">{cloudError || 'Error de conexión'}</p>
+                                                <p className="text-red-400 mb-2 font-black uppercase tracking-tighter">{cloudError || 'Sin conexión'}</p>
                                             )}
                                             
                                             <button 
                                                 onClick={() => { onForceSync?.(); setIsMenuOpen(false); }}
-                                                className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
+                                                className="w-full mt-4 bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
                                             >
                                                 <ArrowPathIcon className="w-4 h-4" />
-                                                Subir locales a la nube
+                                                SUBIR DATOS AHORA
                                             </button>
-                                            <p className="text-[9px] text-gray-500 mt-3 italic leading-tight">Usa esto si has escrito horarios en este móvil y no los ves en otros sitios.</p>
                                         </div>
 
                                         {(isPermissionDenied || isDatabaseMissing) && (
                                             <div className="mt-4 pt-4 border-t border-gray-800">
-                                                <p className="mb-4 text-gray-300 leading-relaxed text-center">
-                                                    {isDatabaseMissing 
-                                                        ? 'Tu base de datos no ha sido creada en Firebase todavía.' 
-                                                        : 'Faltan permisos de escritura en las reglas de Firestore.'}
-                                                </p>
-                                                
                                                 {isPermissionDenied && (
                                                     <div className="mb-4">
                                                         <button 
@@ -186,17 +187,17 @@ service cloud.firestore {
                                         )}
                                         <button 
                                             onClick={() => { onConfigureApi(); setIsMenuOpen(false); }} 
-                                            className="mt-4 w-full text-gray-500 hover:text-white text-[9px] uppercase font-bold tracking-widest border-t border-gray-800 pt-3"
+                                            className="mt-6 w-full text-gray-500 hover:text-white text-[9px] uppercase font-black tracking-widest border-t border-gray-800 pt-4 text-center"
                                         >
-                                            Cambiar Configuración Cloud
+                                            RE-CONFIGURAR FIREBASE
                                         </button>
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <button onClick={onConfigureApi} className="text-xs text-yellow-500 flex items-center space-x-1 bg-yellow-500/10 px-4 py-2 rounded-xl border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors font-bold uppercase tracking-tighter">
+                            <button onClick={onConfigureApi} className="text-[10px] text-yellow-500 flex items-center space-x-2 bg-yellow-500/10 px-4 py-2 rounded-xl border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors font-black uppercase tracking-widest">
                                 <Cog6ToothIcon className="w-4 h-4" />
-                                <span>Configurar Nube</span>
+                                <span>CONFIGURAR NUBE</span>
                             </button>
                         )}
                     </div>

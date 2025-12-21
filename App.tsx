@@ -17,9 +17,9 @@ import ConfirmModal from './components/ConfirmModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import * as FirestoreService from './services/firestoreService';
 import * as ApiKeyService from './services/apiKeyService';
-import { ExclamationCircleIcon } from './components/icons';
+import { ExclamationCircleIcon, ArrowPathIcon } from './components/icons';
 
-const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
+const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule_v2';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
 const FIREBASE_RULES = `rules_version = '2';
@@ -75,32 +75,27 @@ const App: React.FC = () => {
     const isInitialLoadRef = useRef(true);
     const unsubscribeRef = useRef<(() => void) | null>(null);
 
-    const firebaseConsoleUrl = useMemo(() => {
-        const keys = ApiKeyService.getApiKeys();
-        if (keys && keys.apiKey) {
-            try {
-                const config = JSON.parse(keys.apiKey);
-                if (config.projectId) {
-                    return `https://console.firebase.google.com/project/${config.projectId}/firestore/rules`;
-                }
-            } catch (e) { return null; }
-        }
-        return null;
-    }, [cloudConfigVersion]);
-
     const handleCloudError = useCallback((error: any) => {
-        setSyncStatus('error');
         const errorMsg = (error.message || "").toLowerCase();
         const errorCode = (error.code || "").toLowerCase();
         
+        console.error("Cloud Error Details:", errorCode, errorMsg);
+
+        if (errorMsg.includes('network') || errorMsg.includes('offline') || errorMsg.includes('failed to fetch')) {
+            setSyncStatus('error');
+            setCloudError("Sin conexión a internet. Reintentando...");
+            return;
+        }
+
+        setSyncStatus('error');
         if (errorCode.includes('permission') || errorMsg.includes('permission') || errorMsg.includes('insufficient')) {
-            setCloudError("REGLAS BLOQUEADAS: Debes permitir el acceso a usuarios autenticados.");
+            setCloudError("REGLAS BLOQUEADAS: Acceso denegado en Firestore.");
             setIsPermissionError(true);
         } else if (errorCode.includes('not-found') || errorMsg.includes('not found')) {
-            setCloudError("Base de datos inexistente.");
+            setCloudError("Base de datos no encontrada.");
             setIsPermissionError(false);
         } else {
-            setCloudError(error.message || "Error de conexión con Firebase");
+            setCloudError("Fallo en la nube. Revisa tu configuración.");
             setIsPermissionError(false);
         }
     }, []);
@@ -111,38 +106,24 @@ const App: React.FC = () => {
         setTimeout(() => setRulesCopied(false), 3000);
     };
 
-    const handleForceUpload = async () => {
-        if (!isCloudConnected) return;
-        setSyncStatus('syncing');
-        try {
-            await FirestoreService.saveScheduleToCloud(schedule);
-            setSyncStatus('success');
-            setCloudError(null);
-            alert("✅ Datos locales subidos correctamente a la nube.");
-        } catch (e) {
-            handleCloudError(e);
-        }
-    };
-
     const initializeCloud = useCallback(async () => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated) return false;
         
+        const keys = ApiKeyService.getApiKeys();
+        if (!keys) {
+            setIsCloudConnected(false);
+            setSyncStatus('idle');
+            return false;
+        }
+
         if (unsubscribeRef.current) {
             unsubscribeRef.current();
             unsubscribeRef.current = null;
         }
 
-        const keys = ApiKeyService.getApiKeys();
-        if (!keys) {
-            setIsCloudConnected(false);
-            setSyncStatus('idle');
-            return;
-        }
-
         try {
             setSyncStatus('syncing');
-            const configText = keys.apiKey;
-            const config = JSON.parse(configText);
+            const config = JSON.parse(keys.apiKey);
             
             const success = await FirestoreService.initFirestore(config);
             setIsCloudConnected(success);
@@ -151,14 +132,11 @@ const App: React.FC = () => {
                 const unsub = FirestoreService.subscribeToSchedule(
                     (newSchedule) => {
                         if (isInitialLoadRef.current) {
-                            // Si la nube tiene datos, los cargamos.
-                            // Si está vacía, conservamos los locales.
                             if (Object.keys(newSchedule).length > 0) {
                                 setSchedule(newSchedule);
                             }
                             isInitialLoadRef.current = false;
                         } else {
-                            // Actualización en tiempo real desde otros dispositivos
                             setSchedule(prev => {
                                 if (JSON.stringify(prev) !== JSON.stringify(newSchedule)) {
                                     return newSchedule;
@@ -173,14 +151,15 @@ const App: React.FC = () => {
                     handleCloudError
                 );
                 unsubscribeRef.current = unsub;
+                return true;
             } else {
                 setSyncStatus('error');
-                setCloudError("No se pudo conectar a Firebase.");
+                return false;
             }
         } catch (e: any) {
-            console.error("Firebase Setup Error", e);
             handleCloudError(e);
             setIsCloudConnected(false);
+            return false;
         }
     }, [isAuthenticated, cloudConfigVersion, handleCloudError]);
 
@@ -189,28 +168,23 @@ const App: React.FC = () => {
         return () => { if (unsubscribeRef.current) unsubscribeRef.current(); };
     }, [initializeCloud]);
 
-    // EFECTO DE GUARDADO AUTOMÁTICO
+    // Persistencia y Sincronización
     useEffect(() => {
         localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
         
-        // Solo guardamos en la nube si:
-        // 1. Estamos conectados.
-        // 2. Ya pasó la carga inicial (evita sobrescribir lo local con nube vacía antes de tiempo).
-        // 3. No hay un error crítico bloqueando.
+        // Solo sincronizamos si estamos conectados y NO es la carga inicial
         if (isCloudConnected && !isInitialLoadRef.current && syncStatus !== 'error') {
             if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
             
             syncTimeoutRef.current = window.setTimeout(async () => {
                 try {
-                    // Solo iniciamos el estado 'syncing' si realmente vamos a intentar guardar
-                    // No queremos que parpadee si el estado es el mismo
                     await FirestoreService.saveScheduleToCloud(schedule);
                     setSyncStatus('success');
                     setCloudError(null);
                 } catch (e: any) {
                     handleCloudError(e);
                 }
-            }, 2000);
+            }, 2500); 
         }
     }, [schedule, isCloudConnected, syncStatus, handleCloudError]);
 
@@ -275,42 +249,15 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
-            {cloudError && (
-                <div className="bg-red-700 p-4 text-white text-center text-[11px] font-black flex flex-col items-center justify-center gap-4 sticky top-0 z-50 shadow-2xl border-b border-red-500/50 animate-fade-in">
-                    <div className="flex items-center gap-3">
-                        <ExclamationCircleIcon className="w-6 h-6 animate-pulse text-white" />
-                        <span className="uppercase tracking-tighter leading-tight max-w-[250px] sm:max-w-none">
-                            {isPermissionError ? 'TU BASE DE DATOS ESTÁ BLOQUEADA (REGLAS DE PRODUCCIÓN)' : cloudError}
-                        </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                        {isPermissionError && (
-                            <>
-                                <button 
-                                    onClick={copyRulesDirectly} 
-                                    className={`${rulesCopied ? 'bg-green-500' : 'bg-white text-red-700'} px-5 py-2 rounded-xl text-[10px] shadow-lg transition-all transform active:scale-95 font-black uppercase flex items-center gap-2`}
-                                >
-                                    {rulesCopied ? '✅ REGLAS COPIADAS' : '📋 COPIAR REGLAS SEGURAS'}
-                                </button>
-                                {firebaseConsoleUrl && (
-                                    <a 
-                                        href={firebaseConsoleUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="bg-blue-600 text-white px-5 py-2 rounded-xl text-[10px] shadow-lg transition-all transform active:scale-95 font-black uppercase border border-blue-400/50"
-                                    >
-                                        🌐 ABRIR FIREBASE RULES
-                                    </a>
-                                )}
-                            </>
-                        )}
-                        <button 
-                            onClick={() => setShowApiKeyModal(true)} 
-                            className="bg-gray-800 text-gray-300 px-5 py-2 rounded-xl text-[10px] shadow-lg transition-all transform active:scale-95 font-black uppercase border border-gray-600"
-                        >
-                            ⚙️ RE-CONFIGURAR
+            {cloudError && syncStatus === 'error' && (
+                <div className="bg-red-700 p-2 text-white text-center text-[10px] font-black flex items-center justify-center gap-2 sticky top-0 z-50 shadow-2xl border-b border-red-500 animate-fade-in">
+                    <ExclamationCircleIcon className="w-4 h-4" />
+                    <span className="uppercase">{cloudError}</span>
+                    {isPermissionError && (
+                        <button onClick={copyRulesDirectly} className={`${rulesCopied ? 'bg-green-500' : 'bg-white text-red-700'} px-2 py-1 rounded ml-2 text-[8px]`}>
+                            {rulesCopied ? 'COPIADO' : 'COPIAR REGLAS'}
                         </button>
-                    </div>
+                    )}
                 </div>
             )}
             <Header
@@ -323,7 +270,15 @@ const App: React.FC = () => {
                 syncStatus={syncStatus}
                 cloudError={cloudError}
                 onConfigureApi={() => setShowApiKeyModal(true)}
-                onForceSync={handleForceUpload}
+                onForceSync={async () => {
+                    setSyncStatus('syncing');
+                    try {
+                        await FirestoreService.saveScheduleToCloud(schedule);
+                        setSyncStatus('success');
+                        setCloudError(null);
+                        alert("✅ Datos subidos a la nube.");
+                    } catch (e) { handleCloudError(e); }
+                }}
             />
             <main className="flex-grow py-4">
                 <WeekView days={weekDays} onEditDay={setEditingDay} />
@@ -341,7 +296,7 @@ const App: React.FC = () => {
             {editingDay && <EditShiftModal day={editingDay} onClose={() => setEditingDay(null)} onSave={handleUpdateDay} templates={templates} onManageTemplates={() => setIsManagingTemplates(true)} />}
             {isManagingTemplates && <ManageTemplatesModal templates={templates} onAddTemplate={addTemplate} onDeleteTemplate={deleteTemplate} onClose={() => setIsManagingTemplates(false)} />}
             {isCalendarOpen && <CalendarPickerModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} currentDate={currentDate} onDateSelect={(d) => { setCurrentDate(d); setIsCalendarOpen(false); }} />}
-            {isLogoutModalOpen && <ConfirmModal isOpen={isLogoutModalOpen} title="Cerrar Sesión" message="¿Estás seguro de que quieres salir?" onConfirm={handleLogout} onCancel={() => setIsLogoutModalOpen(false)} />}
+            {isLogoutModalOpen && <ConfirmModal isOpen={isLogoutModalOpen} title="Cerrar Sesión" message="¿Estás seguro?" onConfirm={handleLogout} onCancel={() => setIsLogoutModalOpen(false)} />}
         </div>
     );
 };
