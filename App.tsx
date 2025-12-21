@@ -127,10 +127,10 @@ const App: React.FC = () => {
     };
 
     /**
-     * LÓGICA DE BALANCE DE HORAS CORREGIDA:
-     * 1. Sumamos las horas físicas reales de los días de 'Trabajo'.
-     * 2. El objetivo semanal es: (Días marcados como Trabajo) * 8h.
-     * 3. Las vacaciones/festivos no suman horas trabajadas ni aumentan el objetivo.
+     * LÓGICA DE HORAS EXTRA (MÍNIMO 0):
+     * 1. Sumamos las horas físicas reales.
+     * 2. Objetivo = Días de Trabajo * 8h.
+     * 3. Extra = Máximo(0, Físicas - Objetivo).
      */
     const { totalHours, overtimeHours } = useMemo(() => {
         let physicalHours = 0;
@@ -146,10 +146,10 @@ const App: React.FC = () => {
         const roundedTotal = Math.round(physicalHours * 100) / 100;
         const targetHours = workDaysCount * 8;
         
-        // Ahora el balance refleja la realidad de tus turnos de 8h
-        const balance = roundedTotal - targetHours;
+        // Solo hay horas extra si el balance es positivo, sino es 0.00
+        const extra = Math.max(0, roundedTotal - targetHours);
         
-        return { totalHours: roundedTotal, overtimeHours: balance };
+        return { totalHours: roundedTotal, overtimeHours: extra };
     }, [weekDays]);
 
     const handleDownloadMonth = async () => {
@@ -172,13 +172,13 @@ const App: React.FC = () => {
         });
 
         const target = workDaysInMonth * 8;
-        const balance = totalWorked - target;
+        const extra = Math.max(0, totalWorked - target);
 
         await downloadMonthScheduleAsPdf({ 
             monthDays, 
             currentDate, 
             totalHours: totalWorked, 
-            overtimeHours: balance 
+            overtimeHours: extra 
         });
         setIsDownloadingMonth(false);
     };
@@ -205,14 +205,14 @@ const App: React.FC = () => {
         });
 
         const target = workDaysInPeriod * 8;
-        const balance = totalWorked - target;
+        const extra = Math.max(0, totalWorked - target);
 
         await downloadCustomPeriodPdf({ 
             periodDays, 
             startDate: start, 
             endDate: end, 
             totalHours: totalWorked, 
-            overtimeHours: balance 
+            overtimeHours: extra 
         });
         setIsDownloadingCustom(false);
         setIsCustomPeriodModalOpen(false);
