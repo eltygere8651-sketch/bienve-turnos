@@ -62,10 +62,11 @@ const addHeader = async (doc: jsPDF) => {
     } catch (e) { console.error(e); }
 };
 
-// Función auxiliar para formatear la línea de cada día
 const formatDayLine = (day: Day): string => {
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const dayName = dayNames[day.date.getUTCDay()];
+    const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    let dIdx = day.date.getUTCDay() - 1;
+    if (dIdx === -1) dIdx = 6;
+    const dayName = dayNames[dIdx];
     const dateStr = `${String(day.date.getUTCDate()).padStart(2, '0')}/${String(day.date.getUTCMonth() + 1).padStart(2, '0')}`;
     
     let statusText = '';
@@ -83,7 +84,7 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     
     doc.setFontSize(13);
     doc.setTextColor("#64748B");
-    doc.text(`Resumen Semanal: ${getWeekTitle(currentDate)}`, 15, 45);
+    doc.text(`${getWeekTitle(currentDate)}`, 15, 45);
 
     let yPos = 55;
     doc.setFontSize(11);
@@ -98,12 +99,12 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     yPos += 8;
     doc.setLineWidth(0.5);
     doc.line(20, yPos, 190, yPos);
-    yPos += 8;
+    yPos += 10;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total Trabajado: ${totalHours.toFixed(2)}h`, 20, yPos);
-    yPos += 7;
-    doc.text(`Balance Extra (base 40h): ${overtimeHours.toFixed(2)}h`, 20, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 20, yPos);
+    yPos += 8;
+    doc.text(`Balance Extra (Base 40h/semana): ${overtimeHours.toFixed(2)}h`, 20, yPos);
     
     doc.save(`horario_semanal.pdf`);
 };
@@ -124,12 +125,7 @@ const renderPeriodDays = (doc: jsPDF, days: Day[], startY: number): number => {
         const mondayStr = monday.toISOString().split('T')[0];
 
         if (mondayStr !== lastMondayStr) {
-            if (yPos > 260) {
-                doc.addPage();
-                yPos = 20;
-            } else {
-                yPos += 4;
-            }
+            if (yPos > 260) { doc.addPage(); yPos = 20; } else { yPos += 4; }
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(10);
             doc.setTextColor("#334155");
@@ -141,11 +137,7 @@ const renderPeriodDays = (doc: jsPDF, days: Day[], startY: number): number => {
             lastMondayStr = mondayStr;
         }
 
-        if (yPos > 280) {
-            doc.addPage();
-            yPos = 20;
-        }
-
+        if (yPos > 280) { doc.addPage(); yPos = 20; }
         doc.text(formatDayLine(day), 20, yPos);
         yPos += 4.5;
     });
@@ -170,12 +162,12 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, 195, yPos);
-    yPos += 8;
+    yPos += 10;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total de Horas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
-    yPos += 7;
-    doc.text(`Balance de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
+    yPos += 8;
+    doc.text(`Balance Total de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
 
     doc.save(`horario_mensual.pdf`);
 };
@@ -200,12 +192,12 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, 195, yPos);
-    yPos += 8;
+    yPos += 10;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total de Horas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
-    yPos += 7;
-    doc.text(`Balance de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
+    yPos += 8;
+    doc.text(`Balance Total de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
     
     doc.save(`horario_personalizado.pdf`);
 };

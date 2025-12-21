@@ -126,9 +126,14 @@ const App: React.FC = () => {
         } catch (e) { handleCloudError(e); }
     };
 
+    // Lógica Central de Horas (Solo Físicas)
     const { totalHours, overtimeHours } = useMemo(() => {
-        const workHours = weekDays.reduce((acc, day) => day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
-        // Objetivo fijo de 40h semanales según petición
+        // Sumamos únicamente las horas de los turnos de trabajo
+        const workHours = weekDays.reduce((acc, day) => {
+            return day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc;
+        }, 0);
+        
+        // Objetivo de 40h físicas. Si trabaja menos, el balance es negativo.
         return { totalHours: workHours, overtimeHours: workHours - 40 };
     }, [weekDays]);
 
@@ -142,10 +147,17 @@ const App: React.FC = () => {
             return found || { date, shift: '', status: DayStatus.Work };
         });
 
-        const total = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        // El objetivo mensual es proporcional a los días del mes (Días / 7 * 40h)
+        const totalWorked = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
+        // Objetivo proporcional a las semanas/días del mes
         const target = (monthDays.length / 7) * 40;
-        await downloadMonthScheduleAsPdf({ monthDays, currentDate, totalHours: total, overtimeHours: total - target });
+        const balance = totalWorked - target;
+
+        await downloadMonthScheduleAsPdf({ 
+            monthDays, 
+            currentDate, 
+            totalHours: totalWorked, 
+            overtimeHours: balance 
+        });
         setIsDownloadingMonth(false);
     };
 
@@ -160,9 +172,18 @@ const App: React.FC = () => {
             periodDays.push(found || { date: new Date(curr), shift: '', status: DayStatus.Work });
             curr.setUTCDate(curr.getUTCDate() + 1);
         }
-        const total = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
+        
+        const totalWorked = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
         const target = (periodDays.length / 7) * 40;
-        await downloadCustomPeriodPdf({ periodDays, startDate: start, endDate: end, totalHours: total, overtimeHours: total - target });
+        const balance = totalWorked - target;
+
+        await downloadCustomPeriodPdf({ 
+            periodDays, 
+            startDate: start, 
+            endDate: end, 
+            totalHours: totalWorked, 
+            overtimeHours: balance 
+        });
         setIsDownloadingCustom(false);
         setIsCustomPeriodModalOpen(false);
     };
