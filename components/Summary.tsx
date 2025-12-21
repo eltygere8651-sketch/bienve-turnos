@@ -25,6 +25,9 @@ const Summary: React.FC<SummaryProps> = ({
         return () => document.removeEventListener('mousedown', clickOutside);
     }, []);
 
+    // Color del balance: verde si es positivo, rojo si es negativo (debes horas)
+    const extraColor = overtimeHours > 0 ? 'text-green-500' : overtimeHours < 0 ? 'text-red-400' : 'text-white';
+
     return (
         <footer className="fixed bottom-0 left-0 right-0 bg-[#0b0f1a]/95 backdrop-blur-lg border-t border-gray-800 p-5 z-40 safe-bottom">
             <div className="max-w-xl mx-auto flex items-center justify-between">
@@ -34,8 +37,8 @@ const Summary: React.FC<SummaryProps> = ({
                         <span className="text-xl font-black text-white leading-none">{totalHours.toFixed(2)}</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">EXTRA</span>
-                        <span className={`text-xl font-black leading-none ${overtimeHours > 0 ? 'text-green-500' : 'text-white'}`}>
+                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">BALANCE</span>
+                        <span className={`text-xl font-black leading-none ${extraColor}`}>
                             {overtimeHours.toFixed(2)}
                         </span>
                     </div>

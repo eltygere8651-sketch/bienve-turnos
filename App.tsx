@@ -126,16 +126,30 @@ const App: React.FC = () => {
         } catch (e) { handleCloudError(e); }
     };
 
+    /**
+     * LÓGICA DE BALANCE DE HORAS CORREGIDA:
+     * 1. Sumamos las horas físicas reales de los días de 'Trabajo'.
+     * 2. El objetivo semanal es: (Días marcados como Trabajo) * 8h.
+     * 3. Las vacaciones/festivos no suman horas trabajadas ni aumentan el objetivo.
+     */
     const { totalHours, overtimeHours } = useMemo(() => {
-        const physicalHours = weekDays.reduce((acc, day) => {
-            return day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc;
-        }, 0);
+        let physicalHours = 0;
+        let workDaysCount = 0;
+
+        weekDays.forEach(day => {
+            if (day.status === DayStatus.Work) {
+                workDaysCount++;
+                physicalHours += calculateHoursFromShift(day.shift);
+            }
+        });
         
-        // Redondeo final para evitar .4999999
         const roundedTotal = Math.round(physicalHours * 100) / 100;
-        const extra = Math.max(0, roundedTotal - 40);
+        const targetHours = workDaysCount * 8;
         
-        return { totalHours: roundedTotal, overtimeHours: extra };
+        // Ahora el balance refleja la realidad de tus turnos de 8h
+        const balance = roundedTotal - targetHours;
+        
+        return { totalHours: roundedTotal, overtimeHours: balance };
     }, [weekDays]);
 
     const handleDownloadMonth = async () => {
@@ -148,15 +162,23 @@ const App: React.FC = () => {
             return found || { date, shift: '', status: DayStatus.Work };
         });
 
-        const totalWorked = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        const target = (monthDays.length / 7) * 40;
-        const extra = Math.max(0, totalWorked - target);
+        let totalWorked = 0;
+        let workDaysInMonth = 0;
+        monthDays.forEach(d => {
+            if (d.status === DayStatus.Work) {
+                workDaysInMonth++;
+                totalWorked += calculateHoursFromShift(d.shift);
+            }
+        });
+
+        const target = workDaysInMonth * 8;
+        const balance = totalWorked - target;
 
         await downloadMonthScheduleAsPdf({ 
             monthDays, 
             currentDate, 
             totalHours: totalWorked, 
-            overtimeHours: extra 
+            overtimeHours: balance 
         });
         setIsDownloadingMonth(false);
     };
@@ -173,16 +195,24 @@ const App: React.FC = () => {
             curr.setUTCDate(curr.getUTCDate() + 1);
         }
         
-        const totalWorked = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        const target = (periodDays.length / 7) * 40;
-        const extra = Math.max(0, totalWorked - target);
+        let totalWorked = 0;
+        let workDaysInPeriod = 0;
+        periodDays.forEach(d => {
+            if (d.status === DayStatus.Work) {
+                workDaysInPeriod++;
+                totalWorked += calculateHoursFromShift(d.shift);
+            }
+        });
+
+        const target = workDaysInPeriod * 8;
+        const balance = totalWorked - target;
 
         await downloadCustomPeriodPdf({ 
             periodDays, 
             startDate: start, 
             endDate: end, 
             totalHours: totalWorked, 
-            overtimeHours: extra 
+            overtimeHours: balance 
         });
         setIsDownloadingCustom(false);
         setIsCustomPeriodModalOpen(false);
