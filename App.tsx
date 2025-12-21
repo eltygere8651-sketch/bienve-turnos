@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Day, Schedule, DayStatus } from './types';
-import { getWeekId, getWeekDays, getWeekTitle } from './utils/dateUtils';
+import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import { downloadScheduleAsPdf } from './services/pdfService';
+import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, downloadCustomPeriodPdf } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -17,7 +17,6 @@ import ConfirmModal from './components/ConfirmModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import * as FirestoreService from './services/firestoreService';
 import * as ApiKeyService from './services/apiKeyService';
-import { ExclamationCircleIcon } from './components/icons';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule_v3';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
@@ -28,7 +27,6 @@ const App: React.FC = () => {
     });
 
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [cloudConfigVersion, setCloudConfigVersion] = useState(0); 
     
     const [schedule, setSchedule] = useState<Schedule>(() => {
         try {
@@ -56,102 +54,37 @@ const App: React.FC = () => {
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
+    const [isDownloadingCustom, setIsDownloadingCustom] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
-    const syncTimeoutRef = useRef<number | null>(null);
-    const isInitialLoadRef = useRef(true);
-    const unsubscribeRef = useRef<(() => void) | null>(null);
-    const scheduleRef = useRef<Schedule>(schedule);
-
-    useEffect(() => {
-        scheduleRef.current = schedule;
-    }, [schedule]);
-
     const handleCloudError = useCallback((error: any) => {
-        const errorMsg = (error.message || "").toLowerCase();
-        const errorCode = (error.code || "").toLowerCase();
-        
-        console.warn("Sync Error Detail:", errorCode, errorMsg);
-
         setSyncStatus('error');
-        if (errorMsg.includes('network') || errorMsg.includes('offline') || errorMsg.includes('failed to fetch')) {
-            setCloudError("Móvil sin conexión.");
-        } else if (errorCode.includes('permission')) {
-            setCloudError("Error de permisos.");
-        } else {
-            setCloudError("Error de nube.");
-        }
+        setCloudError("Error de nube.");
     }, []);
 
     const initializeCloud = useCallback(async () => {
         if (!isAuthenticated) return false;
-        
         const keys = ApiKeyService.getApiKeys();
-        if (!keys) {
-            setIsCloudConnected(false);
-            setSyncStatus('idle');
-            return false;
-        }
-
-        if (unsubscribeRef.current) unsubscribeRef.current();
+        if (!keys) return false;
 
         try {
             setSyncStatus('syncing');
-            const config = JSON.parse(keys.apiKey);
+            const config = typeof keys.apiKey === 'string' ? JSON.parse(keys.apiKey) : keys.apiKey;
             const success = await FirestoreService.initFirestore(config);
             setIsCloudConnected(success);
-            
             if (success) {
-                unsubscribeRef.current = FirestoreService.subscribeToSchedule(
-                    (cloudSchedule) => {
-                        const localString = JSON.stringify(scheduleRef.current);
-                        const cloudString = JSON.stringify(cloudSchedule);
-
-                        if (localString !== cloudString) {
-                            console.log("Nube -> Local: Actualizando datos.");
-                            setSchedule(cloudSchedule);
-                            localStorage.setItem(SCHEDULE_STORAGE_KEY, cloudString);
-                        }
-                        
-                        setSyncStatus('success');
-                        setCloudError(null);
-                        isInitialLoadRef.current = false;
-                    },
-                    handleCloudError
-                );
-                return true;
+                FirestoreService.subscribeToSchedule((cloudSchedule) => {
+                    setSchedule(cloudSchedule);
+                    setSyncStatus('success');
+                }, handleCloudError);
             }
-        } catch (e: any) {
-            handleCloudError(e);
-            return false;
-        }
-        return false;
-    }, [isAuthenticated, cloudConfigVersion, handleCloudError]);
+        } catch (e) { handleCloudError(e); }
+    }, [isAuthenticated, handleCloudError]);
 
-    useEffect(() => {
-        initializeCloud();
-        return () => { if (unsubscribeRef.current) unsubscribeRef.current(); };
-    }, [initializeCloud]);
-
-    // Subida automática a la nube al detectar cambios (debounced)
-    useEffect(() => {
-        if (!isCloudConnected || isInitialLoadRef.current || syncStatus === 'error') return;
-
-        if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
-        
-        syncTimeoutRef.current = window.setTimeout(async () => {
-            try {
-                setSyncStatus('syncing');
-                await FirestoreService.saveScheduleToCloud(scheduleRef.current);
-                setSyncStatus('success');
-                console.log("Local -> Nube: Sincronizado.");
-            } catch (e: any) {
-                handleCloudError(e);
-            }
-        }, 3000);
-    }, [schedule, isCloudConnected, handleCloudError]);
+    useEffect(() => { initializeCloud(); }, [initializeCloud]);
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
@@ -163,21 +96,24 @@ const App: React.FC = () => {
     }, [currentDate, schedule, weekId]);
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
-        isInitialLoadRef.current = false;
-        setSchedule(prevSchedule => {
-            const currentWeekData = prevSchedule[weekId] || weekDays;
+        setSchedule(prev => {
+            const currentWeekData = prev[weekId] || weekDays;
             const newWeekDays = [...currentWeekData];
             const dayKey = updatedDay.date.toISOString().slice(0, 10);
-            const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === dayKey);
-            if (dayIndex !== -1) newWeekDays[dayIndex] = updatedDay;
-            else newWeekDays.push(updatedDay);
-            const newSchedule = { ...prevSchedule, [weekId]: newWeekDays };
+            const idx = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === dayKey);
+            if (idx !== -1) newWeekDays[idx] = updatedDay; else newWeekDays.push(updatedDay);
+            const newSchedule = { ...prev, [weekId]: newWeekDays };
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(newSchedule));
+            
+            if (isCloudConnected) {
+                FirestoreService.saveScheduleToCloud(newSchedule).catch(handleCloudError);
+            }
+            
             return newSchedule;
         });
         setEditingDay(null);
-    }, [weekId, weekDays]);
-    
+    }, [weekId, weekDays, isCloudConnected, handleCloudError]);
+
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
         const daysOff = weekDays.filter(d => d.status !== DayStatus.Work).length;
@@ -185,23 +121,43 @@ const App: React.FC = () => {
         return { totalHours: workHours, overtimeHours: workHours - weeklyTarget };
     }, [weekDays]);
 
+    const handleDownloadMonth = async () => {
+        setIsDownloadingMonth(true);
+        const monthDates = getDaysInMonth(currentDate);
+        const monthDays: Day[] = monthDates.map(date => {
+            const wId = getWeekId(date);
+            const dateStr = date.toISOString().slice(0, 10);
+            const found = schedule[wId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === dateStr);
+            return found || { date, shift: '', status: DayStatus.Work };
+        });
+
+        const total = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
+        // Simplificado para el reporte mensual
+        await downloadMonthScheduleAsPdf({ monthDays, currentDate, totalHours: total, overtimeHours: total - (160) });
+        setIsDownloadingMonth(false);
+    };
+
+    const handleDownloadCustom = async (start: Date, end: Date) => {
+        setIsDownloadingCustom(true);
+        const periodDays: Day[] = [];
+        let curr = new Date(start);
+        while (curr <= end) {
+            const wId = getWeekId(curr);
+            const dateStr = curr.toISOString().slice(0, 10);
+            const found = schedule[wId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === dateStr);
+            periodDays.push(found || { date: new Date(curr), shift: '', status: DayStatus.Work });
+            curr.setUTCDate(curr.getUTCDate() + 1);
+        }
+        const total = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
+        await downloadCustomPeriodPdf({ periodDays, startDate: start, endDate: end, totalHours: total, overtimeHours: 0 });
+        setIsDownloadingCustom(false);
+        setIsCustomPeriodModalOpen(false);
+    };
+
     if (!isAuthenticated) return <Login onLogin={() => { localStorage.setItem(AUTH_STORAGE_KEY, 'true'); setIsAuthenticated(true); }} />;
-    
-    if (showApiKeyModal) return (
-        <ApiKeyModal 
-            onSave={(keys) => { ApiKeyService.saveApiKeys(keys); setShowApiKeyModal(false); setCloudConfigVersion(v => v + 1); isInitialLoadRef.current = true; }}
-            onCancel={() => setShowApiKeyModal(false)}
-        />
-    );
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
-            {cloudError && syncStatus === 'error' && (
-                <div onClick={initializeCloud} className="bg-red-700 p-2 text-white text-center text-[11px] font-black flex items-center justify-center gap-2 sticky top-0 z-50 shadow-xl cursor-pointer animate-fade-in uppercase">
-                    <ExclamationCircleIcon className="w-4 h-4" />
-                    <span>{cloudError} - REINTENTAR</span>
-                </div>
-            )}
+        <div className="min-h-screen bg-[#0f172a] text-gray-100 flex flex-col font-sans selection:bg-red-500/30">
             <Header
                 currentWeekTitle={getWeekTitle(currentDate)}
                 onPrevWeek={() => setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; })}
@@ -212,25 +168,25 @@ const App: React.FC = () => {
                 syncStatus={syncStatus}
                 cloudError={cloudError}
                 onConfigureApi={() => setShowApiKeyModal(true)}
-                onForceSync={() => { isInitialLoadRef.current = true; initializeCloud(); }}
+                onForceSync={() => initializeCloud()}
             />
-            <main className="flex-grow py-4">
+            <main className="flex-grow py-6 overflow-x-hidden">
                 <WeekView days={weekDays} onEditDay={setEditingDay} />
             </main>
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
-                onDownload={async () => { setIsDownloading(true); await downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours }); setIsDownloading(false); }}
-                isDownloading={isDownloading}
-                onDownloadMonth={() => {}}
-                isDownloadingMonth={false}
+                onDownload={() => downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours })}
+                onDownloadMonth={handleDownloadMonth}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
-                isDownloadingCustomPeriod={false}
+                isDownloading={isDownloading || isDownloadingMonth || isDownloadingCustom}
             />
             {editingDay && <EditShiftModal day={editingDay} onClose={() => setEditingDay(null)} onSave={handleUpdateDay} templates={templates} onManageTemplates={() => setIsManagingTemplates(true)} />}
             {isManagingTemplates && <ManageTemplatesModal templates={templates} onAddTemplate={addTemplate} onDeleteTemplate={deleteTemplate} onClose={() => setIsManagingTemplates(false)} />}
             {isCalendarOpen && <CalendarPickerModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} currentDate={currentDate} onDateSelect={(d) => { setCurrentDate(d); setIsCalendarOpen(false); }} />}
-            {isLogoutModalOpen && <ConfirmModal isOpen={isLogoutModalOpen} title="Cerrar Sesión" message="¿Estás seguro?" onConfirm={() => { localStorage.removeItem(AUTH_STORAGE_KEY); setIsAuthenticated(false); }} onCancel={() => setIsLogoutModalOpen(false)} />}
+            {isCustomPeriodModalOpen && <CustomPeriodModal isOpen={isCustomPeriodModalOpen} onClose={() => setIsCustomPeriodModalOpen(false)} onConfirm={handleDownloadCustom} />}
+            {isLogoutModalOpen && <ConfirmModal isOpen={isLogoutModalOpen} title="¿Cerrar Sesión?" message="Se mantendrán tus datos pero deberás volver a entrar." onConfirm={() => { localStorage.removeItem(AUTH_STORAGE_KEY); setIsAuthenticated(false); }} onCancel={() => setIsLogoutModalOpen(false)} />}
+            {showApiKeyModal && <ApiKeyModal onSave={(keys) => { ApiKeyService.saveApiKeys(keys); setShowApiKeyModal(false); initializeCloud(); }} onCancel={() => setShowApiKeyModal(false)} />}
         </div>
     );
 };

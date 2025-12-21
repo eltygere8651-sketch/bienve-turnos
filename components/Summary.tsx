@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { DownloadIcon, CalendarDownloadIcon, DocumentTextIcon } from './icons';
 
@@ -5,22 +6,18 @@ interface SummaryProps {
     totalHours: number;
     overtimeHours: number;
     onDownload: () => void;
-    isDownloading: boolean;
     onDownloadMonth: () => void;
-    isDownloadingMonth: boolean;
     onOpenCustomPeriodModal: () => void;
-    isDownloadingCustomPeriod: boolean;
+    isDownloading: boolean;
 }
 
 const Summary: React.FC<SummaryProps> = ({ 
     totalHours, 
     overtimeHours, 
     onDownload, 
-    isDownloading, 
-    onDownloadMonth, 
-    isDownloadingMonth,
+    onDownloadMonth,
     onOpenCustomPeriodModal,
-    isDownloadingCustomPeriod
+    isDownloading 
 }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -32,68 +29,58 @@ const Summary: React.FC<SummaryProps> = ({
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const isAnyDownloadInProgress = isDownloading || isDownloadingMonth || isDownloadingCustomPeriod;
-
     return (
-        <footer className="sticky bottom-0 bg-gray-800/80 backdrop-blur-sm border-t border-gray-700 p-3 shadow-top">
-            <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
-                {/* --- Sección Izquierda: Horas --- */}
-                <div className="flex space-x-4 sm:space-x-6 text-center">
-                    <div>
-                        <p className="text-xs sm:text-sm text-gray-400">Totales</p>
-                        <p className="text-xl sm:text-2xl font-bold text-red-400">{totalHours.toFixed(2)}</p>
+        <footer className="bg-[#0b0f1a] border-t border-gray-800 p-5 z-20 shadow-2xl">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+                <div className="flex space-x-8">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-tight">Totales</span>
+                        <span className="text-xl font-black text-white">{totalHours.toFixed(2)}</span>
                     </div>
-                    <div>
-                        <p className="text-xs sm:text-sm text-gray-400">Extra</p>
-                        <p className={`text-xl sm:text-2xl font-bold ${overtimeHours > 0 ? 'text-yellow-400' : 'text-gray-200'}`}>
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-tight">Extra</span>
+                        <span className={`text-xl font-black ${overtimeHours >= 0 ? 'text-white' : 'text-red-500'}`}>
                             {overtimeHours.toFixed(2)}
-                        </p>
+                        </span>
                     </div>
                 </div>
 
-                {/* --- Sección Derecha: Descarga --- */}
                 <div className="relative" ref={menuRef}>
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        disabled={isAnyDownloadInProgress}
-                        className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed disabled:scale-100"
+                        disabled={isDownloading}
+                        className="bg-[#ef4444] hover:bg-red-500 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold transition shadow-lg active:scale-95 disabled:opacity-50"
                     >
                         <DownloadIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">{isAnyDownloadInProgress ? 'Generando...' : 'Descargar'}</span>
+                        <span className="text-sm">Descargar</span>
                     </button>
+                    
                     {isMenuOpen && (
-                        <div className="absolute bottom-full mb-2 w-full min-w-max rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-20 animate-fade-in right-0 origin-bottom-right">
-                            <div className="py-1">
-                                <button
-                                    onClick={() => { onDownload(); setIsMenuOpen(false); }}
-                                    disabled={isDownloading}
-                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                >
-                                    <DownloadIcon className="w-5 h-5" />
-                                    <span>{isDownloading ? 'Generando...' : 'Descargar Semana'}</span>
-                                </button>
-                                <button
-                                    onClick={() => { onDownloadMonth(); setIsMenuOpen(false); }}
-                                    disabled={isDownloadingMonth}
-                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                >
-                                    <CalendarDownloadIcon className="w-5 h-5" />
-                                    <span>{isDownloadingMonth ? 'Generando...' : 'Descargar Mes'}</span>
-                                </button>
-                                <button
-                                    onClick={() => { onOpenCustomPeriodModal(); setIsMenuOpen(false); }}
-                                    disabled={isDownloadingCustomPeriod}
-                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
-                                >
-                                    <DocumentTextIcon className="w-5 h-5" />
-                                    <span>{isDownloadingCustomPeriod ? 'Generando...' : 'Periodo Personalizado'}</span>
-                                </button>
-                            </div>
+                        <div className="absolute bottom-full right-0 mb-4 w-64 bg-[#1e293b] border border-gray-700 rounded-2xl shadow-2xl p-2 animate-fade-in-scale-up">
+                            <button 
+                                onClick={() => { onDownload(); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-700 rounded-xl flex items-center space-x-3 transition group"
+                            >
+                                <DocumentTextIcon className="w-5 h-5 text-red-500 group-hover:scale-110 transition" />
+                                <span className="text-sm font-bold text-gray-200">Descargar Semana</span>
+                            </button>
+                            <button 
+                                onClick={() => { onDownloadMonth(); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-700 rounded-xl flex items-center space-x-3 transition group"
+                            >
+                                <CalendarDownloadIcon className="w-5 h-5 text-blue-500 group-hover:scale-110 transition" />
+                                <span className="text-sm font-bold text-gray-200">Resumen Mensual</span>
+                            </button>
+                            <button 
+                                onClick={() => { onOpenCustomPeriodModal(); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-700 rounded-xl flex items-center space-x-3 transition group"
+                            >
+                                <DownloadIcon className="w-5 h-5 text-green-500 group-hover:scale-110 transition rotate-180" />
+                                <span className="text-sm font-bold text-gray-200">Periodo Personalizado</span>
+                            </button>
                         </div>
                     )}
                 </div>

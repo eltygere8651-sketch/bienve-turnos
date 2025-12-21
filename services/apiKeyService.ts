@@ -6,41 +6,55 @@ export interface ApiKeys {
     apiKey: string;
 }
 
-export const saveApiKeys = (keys: ApiKeys): void => {
-    try {
-        if (!keys.apiKey || keys.apiKey.trim() === '') return;
-        
-        // Guardamos tanto en el objeto estándar como en un backup por si acaso el navegador limpia el storage
-        const data = JSON.stringify(keys);
-        localStorage.setItem(API_KEYS_STORAGE_KEY, data);
-        localStorage.setItem(API_KEYS_STORAGE_KEY + '_backup', data);
-        
-        console.log("Configuración de nube guardada con éxito en v3.");
-    } catch (error) {
-        console.error("Error al guardar configuración en el dispositivo:", error);
-    }
-};
-
+/**
+ * Intenta obtener la configuración de la nube.
+ * Prioridad: Variable de Entorno > LocalStorage > Backup.
+ */
 export const getApiKeys = (): ApiKeys | null => {
     try {
-        let storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
-        
-        // Si falló la principal, intentamos el backup
-        if (!storedKeys) {
-            storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY + '_backup');
+        // 1. PRIORIDAD ABSOLUTA: Variable de Entorno (Vercel)
+        // Esto permite que la app sea automática en producción
+        const envConfig = process.env.FIREBASE_CONFIG;
+        if (envConfig) {
+            // Si es un objeto, lo stringificamos; si es string, lo usamos tal cual
+            const configStr = typeof envConfig === 'string' ? envConfig : JSON.stringify(envConfig);
+            if (configStr.includes('apiKey') && configStr.includes('projectId')) {
+                return {
+                    clientId: 'vercel_env',
+                    apiKey: configStr
+                };
+            }
         }
 
-        if (storedKeys) {
-            const parsed = JSON.parse(storedKeys);
-            // Verificación estricta de que contiene datos de Firebase
-            if (parsed && parsed.apiKey && (parsed.apiKey.includes('projectId') || parsed.apiKey.includes('apiKey'))) {
+        // 2. Intentar desde LocalStorage principal (configuración manual previa)
+        let storedData = localStorage.getItem(API_KEYS_STORAGE_KEY);
+        
+        // 3. Intentar desde Backup
+        if (!storedData) {
+            storedData = localStorage.getItem(API_KEYS_STORAGE_KEY + '_backup');
+        }
+
+        if (storedData) {
+            const parsed = JSON.parse(storedData);
+            if (parsed && parsed.apiKey) {
                 return parsed;
             }
         }
     } catch (error) {
-        console.error("Error al recuperar configuración del dispositivo:", error);
+        console.error("Error al recuperar configuración:", error);
     }
     return null;
+};
+
+export const saveApiKeys = (keys: ApiKeys): void => {
+    try {
+        if (!keys.apiKey || keys.apiKey.trim() === '') return;
+        const data = JSON.stringify(keys);
+        localStorage.setItem(API_KEYS_STORAGE_KEY, data);
+        localStorage.setItem(API_KEYS_STORAGE_KEY + '_backup', data);
+    } catch (error) {
+        console.error("Error al guardar configuración:", error);
+    }
 };
 
 export const areKeysSet = (): boolean => {
