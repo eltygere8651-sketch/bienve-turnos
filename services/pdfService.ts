@@ -101,9 +101,9 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     yPos += 8;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 20, yPos);
+    doc.text(`Total Trabajado: ${totalHours.toFixed(2)}h`, 20, yPos);
     yPos += 7;
-    doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 20, yPos);
+    doc.text(`Balance Extra (base 40h): ${overtimeHours.toFixed(2)}h`, 20, yPos);
     
     doc.save(`horario_semanal.pdf`);
 };
@@ -117,7 +117,6 @@ const renderPeriodDays = (doc: jsPDF, days: Day[], startY: number): number => {
     doc.setTextColor("#0F172A");
 
     days.forEach((day) => {
-        // Obtener el lunes de la semana de este día para saber si hemos cambiado de semana
         const dayOfWeek = day.date.getUTCDay();
         const diff = day.date.getUTCDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
         const monday = new Date(day.date);
@@ -163,9 +162,7 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     doc.setTextColor("#64748B");
     doc.text(`Horario Mensual: ${getMonthTitle(currentDate)}`, 15, 45);
 
-    // Asegurar orden cronológico
     const sortedDays = [...monthDays].sort((a, b) => a.date.getTime() - b.date.getTime());
-    
     let yPos = renderPeriodDays(doc, sortedDays, 50);
 
     yPos += 10;
@@ -176,9 +173,9 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     yPos += 8;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 15, yPos);
+    doc.text(`Total de Horas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
     yPos += 7;
-    doc.text(`Horas Extra (aprox): ${overtimeHours.toFixed(2)}`, 15, yPos);
+    doc.text(`Balance de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
 
     doc.save(`horario_mensual.pdf`);
 };
@@ -196,7 +193,6 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     doc.text(title, 15, 45);
 
     const sortedDays = [...periodDays].sort((a, b) => a.date.getTime() - b.date.getTime());
-    
     let yPos = renderPeriodDays(doc, sortedDays, 50);
 
     yPos += 10;
@@ -207,7 +203,9 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     yPos += 8;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 15, yPos);
+    doc.text(`Total de Horas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
+    yPos += 7;
+    doc.text(`Balance de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
     
     doc.save(`horario_personalizado.pdf`);
 };

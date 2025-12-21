@@ -128,9 +128,8 @@ const App: React.FC = () => {
 
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
-        const daysOff = weekDays.filter(d => d.status !== DayStatus.Work).length;
-        const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
-        return { totalHours: workHours, overtimeHours: workHours - weeklyTarget };
+        // Objetivo fijo de 40h semanales según petición
+        return { totalHours: workHours, overtimeHours: workHours - 40 };
     }, [weekDays]);
 
     const handleDownloadMonth = async () => {
@@ -144,7 +143,9 @@ const App: React.FC = () => {
         });
 
         const total = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        await downloadMonthScheduleAsPdf({ monthDays, currentDate, totalHours: total, overtimeHours: total - (160) });
+        // El objetivo mensual es proporcional a los días del mes (Días / 7 * 40h)
+        const target = (monthDays.length / 7) * 40;
+        await downloadMonthScheduleAsPdf({ monthDays, currentDate, totalHours: total, overtimeHours: total - target });
         setIsDownloadingMonth(false);
     };
 
@@ -160,7 +161,8 @@ const App: React.FC = () => {
             curr.setUTCDate(curr.getUTCDate() + 1);
         }
         const total = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        await downloadCustomPeriodPdf({ periodDays, startDate: start, endDate: end, totalHours: total, overtimeHours: 0 });
+        const target = (periodDays.length / 7) * 40;
+        await downloadCustomPeriodPdf({ periodDays, startDate: start, endDate: end, totalHours: total, overtimeHours: total - target });
         setIsDownloadingCustom(false);
         setIsCustomPeriodModalOpen(false);
     };
