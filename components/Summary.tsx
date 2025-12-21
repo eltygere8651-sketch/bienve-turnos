@@ -25,7 +25,7 @@ const Summary: React.FC<SummaryProps> = ({
         return () => document.removeEventListener('mousedown', clickOutside);
     }, []);
 
-    // Color de las horas extra: verde si hay, blanco si es 0. Nunca habrá rojo porque el mínimo es 0.
+    // Color de las horas extra: verde si hay, blanco si es 0.
     const extraColor = overtimeHours > 0 ? 'text-green-500' : 'text-white';
 
     return (

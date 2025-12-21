@@ -172,6 +172,7 @@ const App: React.FC = () => {
         });
 
         const target = workDaysInMonth * 8;
+        // CORRECCIÓN: Usar siempre extra (mínimo 0)
         const extra = Math.max(0, totalWorked - target);
 
         await downloadMonthScheduleAsPdf({ 
@@ -205,6 +206,7 @@ const App: React.FC = () => {
         });
 
         const target = workDaysInPeriod * 8;
+        // CORRECCIÓN: Usar siempre extra (mínimo 0)
         const extra = Math.max(0, totalWorked - target);
 
         await downloadCustomPeriodPdf({ 

@@ -104,7 +104,7 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 20, yPos);
     yPos += 8;
-    // Eliminamos "Balance" y aseguramos valor positivo
+    // Forzamos que sea positivo y quitamos la palabra Balance
     doc.text(`Total de Horas Extra: ${Math.max(0, overtimeHours).toFixed(2)}h`, 20, yPos);
     
     doc.save(`horario_semanal.pdf`);
@@ -168,6 +168,7 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
     yPos += 8;
+    // Eliminamos palabra balance y forzamos positivo
     doc.text(`Total de Horas Extra: ${Math.max(0, overtimeHours).toFixed(2)}h`, 15, yPos);
 
     doc.save(`horario_mensual.pdf`);
@@ -198,6 +199,7 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
     yPos += 8;
+    // Eliminamos palabra balance y forzamos positivo
     doc.text(`Total de Horas Extra del Periodo: ${Math.max(0, overtimeHours).toFixed(2)}h`, 15, yPos);
     
     doc.save(`horario_personalizado.pdf`);
