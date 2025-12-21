@@ -1,19 +1,16 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
 
-export const initializeGemini = (): boolean => {
-    // FIX: The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-    if (!process.env.API_KEY) {
-        console.warn("La clave de API de Gemini no está disponible. La función de voz estará deshabilitada.");
+export const initializeGemini = (apiKey: string): boolean => {
+    if (!apiKey) {
+        console.warn("La clave de API de Gemini no se proporcionó. La función de entrada de voz estará deshabilitada.");
         ai = null;
         return false;
     }
     
     try {
-        // FIX: Must use new GoogleGenAI({ apiKey: process.env.API_KEY }) as per strict initialization rules.
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        ai = new GoogleGenAI({ apiKey });
         console.log("Servicio de Gemini inicializado correctamente.");
         return true;
     } catch (error) {
@@ -46,34 +43,29 @@ Examples:
 
 export const parseShiftWithGemini = async (text: string): Promise<string> => {
     if (!ai) {
-        // Intentamos inicializar si no lo está
-        if (!initializeGemini()) {
-            throw new Error("El servicio de Gemini AI no está inicializado.");
-        }
+        throw new Error("El servicio de Gemini AI no está inicializado. Por favor, configura las claves de API.");
     }
-    if (!text || !ai) return '';
+    if (!text) return '';
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-2.5-flash',
             contents: `Parse this shift: "${text}"`,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION,
-                temperature: 0,
+                temperature: 0, // We want deterministic output
             }
         });
         
-        // FIX: Correctly extracting text output from GenerateContentResponse using the .text property.
-        const resultText = response.text || '';
-        const trimmedResult = resultText.trim();
-        
-        if (/^[\d\s\.-C,]+$/.test(trimmedResult) || trimmedResult === '') {
-            return trimmedResult;
+        const resultText = response.text.trim();
+        // Basic validation to ensure the output looks like a shift
+        if (/^[\d\s\.-C,]+$/.test(resultText) || resultText === '') {
+            return resultText;
         }
-        console.warn("Gemini returned a non-standard shift format:", trimmedResult);
-        return '';
+        console.warn("Gemini returned a non-standard shift format:", resultText);
+        return ''; // Return empty if format is weird
     } catch (error) {
         console.error("Error calling Gemini API:", error);
-        throw new Error("Error al procesar el turno con IA.");
+        throw new Error("Failed to parse shift with AI. Please try again or enter manually.");
     }
 };

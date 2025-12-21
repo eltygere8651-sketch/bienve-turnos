@@ -1,5 +1,8 @@
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+
+
+
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
@@ -14,11 +17,8 @@ import ManageTemplatesModal from './components/ManageTemplatesModal';
 import CustomPeriodModal from './components/CustomPeriodModal';
 import Login from './components/Login';
 import ConfirmModal from './components/ConfirmModal';
-import ApiKeyModal from './components/ApiKeyModal';
-import * as FirestoreService from './services/firestoreService';
-import * as ApiKeyService from './services/apiKeyService';
 
-const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule_v3';
+const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
 const App: React.FC = () => {
@@ -27,12 +27,12 @@ const App: React.FC = () => {
     });
 
     const [currentDate, setCurrentDate] = useState(new Date());
-    
     const [schedule, setSchedule] = useState<Schedule>(() => {
         try {
             const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             if (savedSchedule) {
                 const parsed = JSON.parse(savedSchedule);
+                // Re-hydrate Date objects
                 Object.keys(parsed).forEach(weekId => {
                     parsed[weekId] = parsed[weekId].map((day: any) => ({
                         ...day,
@@ -41,219 +41,360 @@ const App: React.FC = () => {
                 });
                 return parsed;
             }
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error("Failed to load schedule from localStorage", error);
+        }
         return {};
     });
     
-    const [isCloudConnected, setIsCloudConnected] = useState(false);
-    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
-    const [cloudError, setCloudError] = useState<string | null>(null);
-    const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-
     const [editingDay, setEditingDay] = useState<Day | null>(null);
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
-    const [isDownloadingCustom, setIsDownloadingCustom] = useState(false);
+    const [isDownloadingCustomPeriod, setIsDownloadingCustomPeriod] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
-    const unsubscribeRef = useRef<(() => void) | null>(null);
-
-    const handleCloudError = useCallback((error: any) => {
-        setSyncStatus('error');
-        setCloudError("Error de nube.");
-    }, []);
-
-    const initializeCloud = useCallback(async () => {
-        if (!isAuthenticated) return false;
-        const keys = ApiKeyService.getApiKeys();
-        if (!keys) return false;
-
+    useEffect(() => {
+        localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
+    }, [isAuthenticated]);
+    
+    useEffect(() => {
         try {
-            setSyncStatus('syncing');
-            const config = typeof keys.apiKey === 'string' ? JSON.parse(keys.apiKey) : keys.apiKey;
-            const success = await FirestoreService.initFirestore(config);
-            setIsCloudConnected(success);
-            if (success) {
-                if (unsubscribeRef.current) unsubscribeRef.current();
-                unsubscribeRef.current = FirestoreService.subscribeToSchedule((cloudSchedule) => {
-                    setSchedule(cloudSchedule);
-                    setSyncStatus('success');
-                }, handleCloudError);
-            }
-        } catch (e) { handleCloudError(e); }
-    }, [isAuthenticated, handleCloudError]);
-
-    useEffect(() => { initializeCloud(); }, [initializeCloud]);
+            localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
+        } catch (error) {
+            console.error("Failed to save schedule to localStorage", error);
+        }
+    }, [schedule]);
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
     const weekDays = useMemo(() => {
         const days = getWeekDays(currentDate);
-        if (!schedule[weekId]) return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
+        if (!schedule[weekId]) {
+            return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
+        }
+        // FIX: Use ISO string (YYYY-MM-DD) for robust date keying in the map.
+        // This prevents inconsistencies with `toDateString()` across different browsers and platforms (like mobile vs. desktop).
         const scheduledDaysMap = new Map(schedule[weekId].map(d => [new Date(d.date).toISOString().slice(0, 10), d]));
         return days.map(date => scheduledDaysMap.get(date.toISOString().slice(0, 10)) || { date, shift: '', status: DayStatus.Work });
     }, [currentDate, schedule, weekId]);
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
-        setSchedule(prev => {
-            const currentWeekData = prev[weekId] || weekDays;
+        setSchedule(prevSchedule => {
+            const currentWeekData = prevSchedule[weekId] || weekDays;
             const newWeekDays = [...currentWeekData];
-            const dayKey = updatedDay.date.toISOString().slice(0, 10);
-            const idx = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === dayKey);
-            if (idx !== -1) newWeekDays[idx] = updatedDay; else newWeekDays.push(updatedDay);
-            const newSchedule = { ...prev, [weekId]: newWeekDays };
-            localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(newSchedule));
-            
-            if (isCloudConnected) {
-                FirestoreService.saveScheduleToCloud(newSchedule).catch(handleCloudError);
+            // FIX: Use ISO string (YYYY-MM-DD) for comparison to reliably find the day to update.
+            const dayIndex = newWeekDays.findIndex(d => new Date(d.date).toISOString().slice(0, 10) === updatedDay.date.toISOString().slice(0, 10));
+            if (dayIndex !== -1) {
+                newWeekDays[dayIndex] = updatedDay;
+            } else {
+                // If day is not found, it might be a new day for this week (e.g. from calendar picker)
+                newWeekDays.push(updatedDay);
             }
-            
-            return newSchedule;
+            return { ...prevSchedule, [weekId]: newWeekDays };
         });
         setEditingDay(null);
-    }, [weekId, weekDays, isCloudConnected, handleCloudError]);
-
-    const handleManualUpload = async () => {
-        if (!isCloudConnected) return;
-        setSyncStatus('syncing');
-        try {
-            await FirestoreService.saveScheduleToCloud(schedule);
-            setSyncStatus('success');
-        } catch (e) { handleCloudError(e); }
-    };
-
-    /**
-     * LÓGICA DE HORAS EXTRA (MÍNIMO 0):
-     * 1. Sumamos las horas físicas reales.
-     * 2. Objetivo = Días de Trabajo * 8h.
-     * 3. Extra = Máximo(0, Físicas - Objetivo).
-     */
+    }, [weekId, weekDays]);
+    
     const { totalHours, overtimeHours } = useMemo(() => {
-        let physicalHours = 0;
-        let workDaysCount = 0;
-
-        weekDays.forEach(day => {
+        const workHours = weekDays.reduce((acc, day) => {
             if (day.status === DayStatus.Work) {
-                workDaysCount++;
-                physicalHours += calculateHoursFromShift(day.shift);
+                return acc + calculateHoursFromShift(day.shift);
             }
-        });
-        
-        const roundedTotal = Math.round(physicalHours * 100) / 100;
-        const targetHours = workDaysCount * 8;
-        
-        // Solo hay horas extra si el balance es positivo, sino es 0.00
-        const extra = Math.max(0, roundedTotal - targetHours);
-        
-        return { totalHours: roundedTotal, overtimeHours: extra };
+            return acc;
+        }, 0);
+    
+        const daysOff = weekDays.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+        // A standard work week is 40 hours with 2 days off. 
+        // Any holidays or vacation days beyond the standard 2 reduce the 40-hour target by 8 hours each.
+        const extraDaysOff = Math.max(0, daysOff - 2);
+        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+    
+        const overtime = workHours - weeklyTarget;
+    
+        return { totalHours: workHours, overtimeHours: overtime };
     }, [weekDays]);
 
+    const handlePrevWeek = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() - 7);
+        setCurrentDate(newDate);
+    };
+
+    const handleNextWeek = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() + 7);
+        setCurrentDate(newDate);
+    };
+    
+    const handleDateSelect = (date: Date) => {
+        setCurrentDate(date);
+        setIsCalendarOpen(false);
+    };
+
+    const handleDownload = async () => {
+        setIsDownloading(true);
+        try {
+            await downloadScheduleAsPdf({
+                weekDays,
+                currentDate,
+                totalHours,
+                overtimeHours
+            });
+        } catch (error) {
+            console.error("PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF.");
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+    
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
-        const monthDates = getDaysInMonth(currentDate);
-        const monthDays: Day[] = monthDates.map(date => {
-            const wId = getWeekId(date);
-            const dateStr = date.toISOString().slice(0, 10);
-            const found = schedule[wId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === dateStr);
-            return found || { date, shift: '', status: DayStatus.Work };
-        });
+        try {
+            const daysInMonth = getDaysInMonth(currentDate);
+    
+            const scheduleMap = new Map<string, Day>();
+            Object.values(schedule).flat().forEach((day: Day) => {
+                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                scheduleMap.set(dayKey, day);
+            });
+    
+            const totalHoursMonth = daysInMonth.reduce((acc, date) => {
+                const dayKey = date.toISOString().slice(0, 10);
+                const day = scheduleMap.get(dayKey);
+                if (day && day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
+                }
+                return acc;
+            }, 0);
+    
+            let overtimeBalanceMonth = 0.0;
+            const processedWeekIds = new Set<string>();
+    
+            daysInMonth.forEach(dateInMonth => {
+                const weekId = getWeekId(dateInMonth);
+                if (processedWeekIds.has(weekId)) {
+                    return;
+                }
+    
+                const fullWeekDays = getWeekDays(dateInMonth);
+                const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
+                    const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                    return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
+                });
 
-        let totalWorked = 0;
-        let workDaysInMonth = 0;
-        monthDays.forEach(d => {
-            if (d.status === DayStatus.Work) {
-                workDaysInMonth++;
-                totalWorked += calculateHoursFromShift(d.shift);
-            }
-        });
+                const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
 
-        const target = workDaysInMonth * 8;
-        // CORRECCIÓN: Usar siempre extra (mínimo 0)
-        const extra = Math.max(0, totalWorked - target);
+                if (isWorkWeek) {
+                    const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
+                        if (day.status === DayStatus.Work) {
+                            return acc + calculateHoursFromShift(day.shift);
+                        }
+                        return acc;
+                    }, 0);
 
-        await downloadMonthScheduleAsPdf({ 
-            monthDays, 
-            currentDate, 
-            totalHours: totalWorked, 
-            overtimeHours: extra 
-        });
-        setIsDownloadingMonth(false);
-    };
+                    const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                    const extraDaysOff = Math.max(0, daysOff - 2);
+                    const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
 
-    const handleDownloadCustom = async (start: Date, end: Date) => {
-        setIsDownloadingCustom(true);
-        const periodDays: Day[] = [];
-        let curr = new Date(start);
-        while (curr <= end) {
-            const wId = getWeekId(curr);
-            const dateStr = curr.toISOString().slice(0, 10);
-            const found = schedule[wId]?.find(d => new Date(d.date).toISOString().slice(0, 10) === dateStr);
-            periodDays.push(found || { date: new Date(curr), shift: '', status: DayStatus.Work });
-            curr.setUTCDate(curr.getUTCDate() + 1);
+                    overtimeBalanceMonth += (workHoursInWeek - weeklyTarget);
+                }
+                
+                processedWeekIds.add(weekId);
+            });
+            
+            const totalOvertimeMonth = overtimeBalanceMonth;
+    
+            const monthDaysForPdf = daysInMonth
+                .map(date => {
+                    const dayKey = date.toISOString().slice(0, 10);
+                    return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
+                })
+                .filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
+    
+            await downloadMonthScheduleAsPdf({
+                monthDays: monthDaysForPdf,
+                currentDate,
+                totalHours: totalHoursMonth,
+                overtimeHours: totalOvertimeMonth
+            });
+    
+        } catch (error) {
+            console.error("Monthly PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del mes.");
+        } finally {
+            setIsDownloadingMonth(false);
         }
-        
-        let totalWorked = 0;
-        let workDaysInPeriod = 0;
-        periodDays.forEach(d => {
-            if (d.status === DayStatus.Work) {
-                workDaysInPeriod++;
-                totalWorked += calculateHoursFromShift(d.shift);
-            }
-        });
-
-        const target = workDaysInPeriod * 8;
-        // CORRECCIÓN: Usar siempre extra (mínimo 0)
-        const extra = Math.max(0, totalWorked - target);
-
-        await downloadCustomPeriodPdf({ 
-            periodDays, 
-            startDate: start, 
-            endDate: end, 
-            totalHours: totalWorked, 
-            overtimeHours: extra 
-        });
-        setIsDownloadingCustom(false);
+    };
+    
+    const handleDownloadCustomPeriod = async (startDate: Date, endDate: Date) => {
+        setIsDownloadingCustomPeriod(true);
         setIsCustomPeriodModalOpen(false);
+
+        try {
+            const periodDates: Date[] = [];
+            let loopDate = new Date(startDate);
+            while (loopDate <= endDate) {
+                periodDates.push(new Date(loopDate));
+                loopDate.setDate(loopDate.getDate() + 1);
+            }
+    
+            const scheduleMap = new Map<string, Day>();
+            Object.values(schedule).flat().forEach((day: Day) => {
+                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                scheduleMap.set(dayKey, day);
+            });
+    
+            const periodDaysWithData = periodDates.map(date => {
+                const dayKey = date.toISOString().slice(0, 10);
+                return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
+            });
+    
+            const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => {
+                if (day && day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
+                }
+                return acc;
+            }, 0);
+    
+            const processedWeekIds = new Set<string>();
+            let overtimeBalancePeriod = 0.0;
+
+            periodDaysWithData.forEach(dayInPeriod => {
+                const weekId = getWeekId(dayInPeriod.date);
+                
+                if (!processedWeekIds.has(weekId)) {
+                    const fullWeekDays = getWeekDays(dayInPeriod.date);
+                    const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
+                        const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                        return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
+                    });
+
+                    const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
+
+                    if (isWorkWeek) {
+                        const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
+                            if (day.status === DayStatus.Work) {
+                                return acc + calculateHoursFromShift(day.shift);
+                            }
+                            return acc;
+                        }, 0);
+
+                        const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                        const extraDaysOff = Math.max(0, daysOff - 2);
+                        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+
+                        overtimeBalancePeriod += (workHoursInWeek - weeklyTarget);
+                    }
+                    
+                    processedWeekIds.add(weekId);
+                }
+            });
+            
+            const totalOvertimePeriod = overtimeBalancePeriod;
+    
+            const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
+
+            await downloadCustomPeriodPdf({
+                periodDays: periodDaysForPdf,
+                startDate,
+                endDate,
+                totalHours: totalHoursPeriod,
+                overtimeHours: totalOvertimePeriod
+            });
+    
+        } catch (error) {
+            console.error("Custom Period PDF Download failed:", error);
+            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del periodo personalizado.");
+        } finally {
+            setIsDownloadingCustomPeriod(false);
+        }
     };
 
-    if (!isAuthenticated) return <Login onLogin={() => { localStorage.setItem(AUTH_STORAGE_KEY, 'true'); setIsAuthenticated(true); }} />;
+    const handleLogin = () => {
+        setIsAuthenticated(true);
+    };
+
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        setIsLogoutModalOpen(false);
+    };
+
+    if (!isAuthenticated) {
+        return <Login onLogin={handleLogin} />;
+    }
 
     return (
-        <div className="min-h-screen bg-[#0f172a] text-gray-100 flex flex-col font-sans selection:bg-red-500/30">
+        <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
             <Header
                 currentWeekTitle={getWeekTitle(currentDate)}
-                onPrevWeek={() => setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; })}
-                onNextWeek={() => setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; })}
+                onPrevWeek={handlePrevWeek}
+                onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
                 onLogout={() => setIsLogoutModalOpen(true)}
-                isCloudConnected={isCloudConnected}
-                syncStatus={syncStatus}
-                cloudError={cloudError}
-                onConfigureApi={() => setShowApiKeyModal(true)}
-                onForceSync={() => initializeCloud()}
-                onManualUpload={handleManualUpload}
             />
-            <main className="flex-grow py-6 overflow-x-hidden">
-                <WeekView days={weekDays} onEditDay={setEditingDay} />
+            <main className="flex-grow py-4 md:py-6 lg:py-8">
+                <WeekView 
+                    days={weekDays} 
+                    onEditDay={setEditingDay} 
+                />
             </main>
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
-                onDownload={() => downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours })}
+                onDownload={handleDownload}
+                isDownloading={isDownloading}
                 onDownloadMonth={handleDownloadMonth}
+                isDownloadingMonth={isDownloadingMonth}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
-                isDownloading={isDownloading || isDownloadingMonth || isDownloadingCustom}
+                isDownloadingCustomPeriod={isDownloadingCustomPeriod}
             />
-            {editingDay && <EditShiftModal day={editingDay} onClose={() => setEditingDay(null)} onSave={handleUpdateDay} templates={templates} onManageTemplates={() => setIsManagingTemplates(true)} />}
-            {isManagingTemplates && <ManageTemplatesModal templates={templates} onAddTemplate={addTemplate} onDeleteTemplate={deleteTemplate} onClose={() => setIsManagingTemplates(false)} />}
-            {isCalendarOpen && <CalendarPickerModal isOpen={isCalendarOpen} onClose={() => setIsCalendarOpen(false)} currentDate={currentDate} onDateSelect={(d) => { setCurrentDate(d); setIsCalendarOpen(false); }} />}
-            {isCustomPeriodModalOpen && <CustomPeriodModal isOpen={isCustomPeriodModalOpen} onClose={() => setIsCustomPeriodModalOpen(false)} onConfirm={handleDownloadCustom} />}
-            {isLogoutModalOpen && <ConfirmModal isOpen={isLogoutModalOpen} title="¿Cerrar Sesión?" message="Se mantendrán tus datos pero deberás volver a entrar." onConfirm={() => { localStorage.removeItem(AUTH_STORAGE_KEY); setIsAuthenticated(false); }} onCancel={() => setIsLogoutModalOpen(false)} />}
-            {showApiKeyModal && <ApiKeyModal onSave={(keys) => { ApiKeyService.saveApiKeys(keys); setShowApiKeyModal(false); initializeCloud(); }} onCancel={() => setShowApiKeyModal(false)} />}
+            {editingDay && (
+                <EditShiftModal
+                    day={editingDay}
+                    onClose={() => setEditingDay(null)}
+                    onSave={handleUpdateDay}
+                    templates={templates}
+                    onManageTemplates={() => setIsManagingTemplates(true)}
+                />
+            )}
+            {isManagingTemplates && (
+                <ManageTemplatesModal
+                    templates={templates}
+                    onAddTemplate={addTemplate}
+                    onDeleteTemplate={deleteTemplate}
+                    onClose={() => setIsManagingTemplates(false)}
+                />
+            )}
+             {isCalendarOpen && (
+                <CalendarPickerModal
+                    isOpen={isCalendarOpen}
+                    onClose={() => setIsCalendarOpen(false)}
+                    currentDate={currentDate}
+                    onDateSelect={handleDateSelect}
+                />
+            )}
+            {isCustomPeriodModalOpen && (
+                <CustomPeriodModal
+                    isOpen={isCustomPeriodModalOpen}
+                    onClose={() => setIsCustomPeriodModalOpen(false)}
+                    onConfirm={handleDownloadCustomPeriod}
+                />
+            )}
+            {isLogoutModalOpen && (
+                <ConfirmModal
+                    isOpen={isLogoutModalOpen}
+                    title="Cerrar Sesión"
+                    message="¿Estás seguro de que quieres cerrar la sesión?"
+                    onConfirm={handleLogout}
+                    onCancel={() => setIsLogoutModalOpen(false)}
+                    confirmText="Cerrar Sesión"
+                />
+            )}
         </div>
     );
 };
