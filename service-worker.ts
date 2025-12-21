@@ -35,11 +35,15 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
 
 sw.addEventListener('fetch', (event: FetchEvent) => {
   if (event.request.method !== 'GET') return;
-  // No cachear archivos de código fuente para ver cambios inmediatos en desarrollo/actualización
-  if (event.request.url.includes('.tsx') || event.request.url.includes('index.tsx')) {
+  
+  const url = event.request.url;
+  
+  // CRÍTICO: No cachear NUNCA archivos de código fuente para evitar versiones obsoletas
+  if (url.includes('.tsx') || url.includes('.ts') || url.includes('.map') || url.includes('index.tsx')) {
     event.respondWith(fetch(event.request));
     return;
   }
+
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request)) as Promise<Response>
   );

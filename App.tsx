@@ -73,15 +73,13 @@ const App: React.FC = () => {
         const errorMsg = (error.message || "").toLowerCase();
         const errorCode = (error.code || "").toLowerCase();
         
-        if (errorMsg.includes('network') || errorMsg.includes('offline')) {
-            setSyncStatus('error');
-            setCloudError("Error de red: móvil sin internet.");
-            return;
-        }
+        console.error("Sync Error:", errorCode, errorMsg);
 
         setSyncStatus('error');
-        if (errorCode.includes('permission')) {
-            setCloudError("Error: Revisa las Reglas en tu Firebase.");
+        if (errorMsg.includes('network') || errorMsg.includes('offline') || errorMsg.includes('failed to fetch')) {
+            setCloudError("Sin conexión a internet.");
+        } else if (errorCode.includes('permission')) {
+            setCloudError("Acceso denegado (Reglas Firebase).");
         } else {
             setCloudError("Error de sincronización.");
         }
@@ -93,6 +91,7 @@ const App: React.FC = () => {
         const keys = ApiKeyService.getApiKeys();
         if (!keys) {
             setIsCloudConnected(false);
+            setSyncStatus('idle');
             return false;
         }
 
@@ -111,7 +110,6 @@ const App: React.FC = () => {
                         const cloudString = JSON.stringify(cloudSchedule);
 
                         if (localString !== cloudString) {
-                            console.log("Sincronización entrante exitosa.");
                             setSchedule(cloudSchedule);
                             localStorage.setItem(SCHEDULE_STORAGE_KEY, cloudString);
                         }
@@ -136,6 +134,7 @@ const App: React.FC = () => {
         return () => { if (unsubscribeRef.current) unsubscribeRef.current(); };
     }, [initializeCloud]);
 
+    // Subida automática al modificar (debounced)
     useEffect(() => {
         if (!isCloudConnected || isInitialLoadRef.current || syncStatus === 'error') return;
 
@@ -149,7 +148,7 @@ const App: React.FC = () => {
             } catch (e: any) {
                 handleCloudError(e);
             }
-        }, 3000);
+        }, 2000);
     }, [schedule, isCloudConnected, handleCloudError]);
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
@@ -196,9 +195,9 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
             {cloudError && syncStatus === 'error' && (
-                <div onClick={initializeCloud} className="bg-red-700 p-2 text-white text-center text-[10px] font-black flex items-center justify-center gap-2 sticky top-0 z-50 shadow-2xl animate-fade-in cursor-pointer">
+                <div onClick={initializeCloud} className="bg-red-600 p-2 text-white text-center text-[11px] font-black flex items-center justify-center gap-2 sticky top-0 z-50 shadow-lg cursor-pointer animate-fade-in uppercase">
                     <ExclamationCircleIcon className="w-4 h-4" />
-                    <span className="uppercase">{cloudError} - PULSA PARA REINTENTAR</span>
+                    <span>{cloudError} - REINTENTAR</span>
                 </div>
             )}
             <Header
@@ -211,10 +210,7 @@ const App: React.FC = () => {
                 syncStatus={syncStatus}
                 cloudError={cloudError}
                 onConfigureApi={() => setShowApiKeyModal(true)}
-                onForceSync={() => {
-                    isInitialLoadRef.current = true;
-                    initializeCloud();
-                }}
+                onForceSync={() => { isInitialLoadRef.current = true; initializeCloud(); }}
             />
             <main className="flex-grow py-4">
                 <WeekView days={weekDays} onEditDay={setEditingDay} />
