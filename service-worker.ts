@@ -1,7 +1,7 @@
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'bienve-app-v8'; // Forzamos actualización de caché
+const CACHE_NAME = 'bienve-app-v9'; 
 const urlsToCache = [
   './',
   './index.html',
@@ -14,9 +14,7 @@ const sw = self as unknown as ServiceWorkerGlobalScope;
 sw.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(urlsToCache).catch(err => {
-        console.warn('Error al precachear algunos recursos:', err);
-      });
+      return cache.addAll(urlsToCache);
     })
   );
   sw.skipWaiting();
@@ -37,8 +35,8 @@ sw.addEventListener('activate', (event: ExtendableEvent) => {
 
 sw.addEventListener('fetch', (event: FetchEvent) => {
   if (event.request.method !== 'GET') return;
-  const isSourceFile = event.request.url.includes('.tsx') || event.request.url.includes('index.tsx');
-  if (isSourceFile) {
+  // No cachear archivos de código fuente para ver cambios inmediatos en desarrollo/actualización
+  if (event.request.url.includes('.tsx') || event.request.url.includes('index.tsx')) {
     event.respondWith(fetch(event.request));
     return;
   }

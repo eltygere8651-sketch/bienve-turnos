@@ -10,12 +10,12 @@ export const saveApiKeys = (keys: ApiKeys): void => {
     try {
         if (!keys.apiKey || keys.apiKey.trim() === '') return;
         
-        // Guardamos tanto en el objeto estándar como en un backup por si acaso
+        // Guardamos tanto en el objeto estándar como en un backup por si acaso el navegador limpia el storage
         const data = JSON.stringify(keys);
         localStorage.setItem(API_KEYS_STORAGE_KEY, data);
         localStorage.setItem(API_KEYS_STORAGE_KEY + '_backup', data);
         
-        console.log("Configuración de nube guardada con éxito.");
+        console.log("Configuración de nube guardada con éxito en v3.");
     } catch (error) {
         console.error("Error al guardar configuración en el dispositivo:", error);
     }
