@@ -30,12 +30,12 @@ const Summary: React.FC<SummaryProps> = ({
             <div className="max-w-xl mx-auto flex items-center justify-between">
                 <div className="flex gap-6">
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">TOTALES</span>
+                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">TRABAJADAS</span>
                         <span className="text-xl font-black text-white leading-none">{totalHours.toFixed(2)}</span>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">EXTRA</span>
-                        <span className={`text-xl font-black leading-none ${overtimeHours >= 0 ? 'text-white' : 'text-red-500'}`}>
+                        <span className={`text-xl font-black leading-none ${overtimeHours > 0 ? 'text-green-500' : 'text-white'}`}>
                             {overtimeHours.toFixed(2)}
                         </span>
                     </div>

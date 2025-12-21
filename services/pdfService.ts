@@ -104,7 +104,8 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 20, yPos);
     yPos += 8;
-    doc.text(`Balance Extra (Base 40h/semana): ${overtimeHours.toFixed(2)}h`, 20, yPos);
+    // Cambiamos de Balance a Total Horas Extra (siempre >= 0)
+    doc.text(`Total de Horas Extra: ${overtimeHours.toFixed(2)}h`, 20, yPos);
     
     doc.save(`horario_semanal.pdf`);
 };
@@ -167,7 +168,7 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
     yPos += 8;
-    doc.text(`Balance Total de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
+    doc.text(`Total de Horas Extra Acumuladas: ${overtimeHours.toFixed(2)}h`, 15, yPos);
 
     doc.save(`horario_mensual.pdf`);
 };
@@ -197,7 +198,7 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
     yPos += 8;
-    doc.text(`Balance Total de Horas Extra: ${overtimeHours.toFixed(2)}h`, 15, yPos);
+    doc.text(`Total de Horas Extra en el periodo: ${overtimeHours.toFixed(2)}h`, 15, yPos);
     
     doc.save(`horario_personalizado.pdf`);
 };

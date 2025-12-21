@@ -126,15 +126,16 @@ const App: React.FC = () => {
         } catch (e) { handleCloudError(e); }
     };
 
-    // Lógica Central de Horas (Solo Físicas)
     const { totalHours, overtimeHours } = useMemo(() => {
-        // Sumamos únicamente las horas de los turnos de trabajo
-        const workHours = weekDays.reduce((acc, day) => {
+        const physicalHours = weekDays.reduce((acc, day) => {
             return day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc;
         }, 0);
         
-        // Objetivo de 40h físicas. Si trabaja menos, el balance es negativo.
-        return { totalHours: workHours, overtimeHours: workHours - 40 };
+        // Redondeo final para evitar .4999999
+        const roundedTotal = Math.round(physicalHours * 100) / 100;
+        const extra = Math.max(0, roundedTotal - 40);
+        
+        return { totalHours: roundedTotal, overtimeHours: extra };
     }, [weekDays]);
 
     const handleDownloadMonth = async () => {
@@ -148,15 +149,14 @@ const App: React.FC = () => {
         });
 
         const totalWorked = monthDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-        // Objetivo proporcional a las semanas/días del mes
         const target = (monthDays.length / 7) * 40;
-        const balance = totalWorked - target;
+        const extra = Math.max(0, totalWorked - target);
 
         await downloadMonthScheduleAsPdf({ 
             monthDays, 
             currentDate, 
             totalHours: totalWorked, 
-            overtimeHours: balance 
+            overtimeHours: extra 
         });
         setIsDownloadingMonth(false);
     };
@@ -175,14 +175,14 @@ const App: React.FC = () => {
         
         const totalWorked = periodDays.reduce((acc, d) => d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
         const target = (periodDays.length / 7) * 40;
-        const balance = totalWorked - target;
+        const extra = Math.max(0, totalWorked - target);
 
         await downloadCustomPeriodPdf({ 
             periodDays, 
             startDate: start, 
             endDate: end, 
             totalHours: totalWorked, 
-            overtimeHours: balance 
+            overtimeHours: extra 
         });
         setIsDownloadingCustom(false);
         setIsCustomPeriodModalOpen(false);
