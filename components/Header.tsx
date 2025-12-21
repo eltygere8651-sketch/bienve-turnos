@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, LogoutIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCircleIcon, Cog6ToothIcon } from './icons';
 import { getApiKeys } from '../services/apiKeyService';
 
@@ -28,8 +28,21 @@ const Header: React.FC<HeaderProps> = ({
     onConfigureApi,
     onForceSync
 }) => {
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [showRules, setShowRules] = useState(false);
     const [copied, setCopied] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Cerrar menú al hacer clic fuera
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const { consoleUrl, isDatabaseMissing, isPermissionDenied, hasKeys } = useMemo(() => {
         const keys = getApiKeys();
@@ -85,45 +98,52 @@ service cloud.firestore {
                     
                     <div className="flex items-center space-x-3 sm:ml-4">
                         {hasKeys ? (
-                            <div className="flex items-center space-x-2">
-                                <div className="group relative">
+                            <div className="relative" ref={menuRef}>
+                                <button 
+                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                    className="p-2 rounded-xl bg-gray-900/50 border border-gray-700 hover:bg-gray-700 transition-colors flex items-center justify-center min-w-[44px] min-h-[44px]"
+                                >
                                     {syncStatus === 'syncing' ? (
-                                        <ArrowPathIcon className="w-5 h-5 text-blue-400 animate-spin cursor-pointer" />
+                                        <ArrowPathIcon className="w-6 h-6 text-blue-400 animate-spin" />
                                     ) : syncStatus === 'success' ? (
-                                        <CheckCircleIcon className="w-5 h-5 text-green-500 cursor-pointer" />
+                                        <CheckCircleIcon className="w-6 h-6 text-green-500" />
                                     ) : (
-                                        <ExclamationCircleIcon className="w-6 h-6 text-red-500 cursor-pointer animate-pulse" />
+                                        <ExclamationCircleIcon className="w-6 h-6 text-red-500 animate-pulse" />
                                     )}
+                                </button>
 
-                                    {/* Tooltip de estado de la nube */}
-                                    <div className="absolute left-0 sm:left-1/2 -translate-x-0 sm:-translate-x-1/2 top-full mt-2 w-72 bg-gray-900 text-white text-[11px] p-5 rounded-2xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-gray-700 pointer-events-none group-hover:pointer-events-auto">
+                                {/* Menú Desplegable (Clic) */}
+                                {isMenuOpen && (
+                                    <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-3 w-72 bg-gray-900 text-white text-[11px] p-5 rounded-2xl shadow-2xl border border-gray-700 z-50 animate-fade-in">
                                         <p className="font-bold text-gray-100 mb-2 uppercase tracking-tighter text-xs text-center border-b border-gray-800 pb-2">
                                             Estado de la Nube
                                         </p>
                                         
                                         <div className="mb-4 text-center">
                                             {syncStatus === 'success' ? (
-                                                <p className="text-green-400 mb-2">✅ Conectado y Sincronizado</p>
+                                                <p className="text-green-400 mb-2 font-bold">✅ Sincronizado Correctamente</p>
+                                            ) : syncStatus === 'syncing' ? (
+                                                <p className="text-blue-400 mb-2">⏳ Sincronizando datos...</p>
                                             ) : (
                                                 <p className="text-red-400 mb-2">{cloudError || 'Error de conexión'}</p>
                                             )}
                                             
                                             <button 
-                                                onClick={onForceSync}
-                                                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                                onClick={() => { onForceSync?.(); setIsMenuOpen(false); }}
+                                                className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
                                             >
-                                                <ArrowPathIcon className="w-3 h-3" />
-                                                Subir datos locales a la nube
+                                                <ArrowPathIcon className="w-4 h-4" />
+                                                Subir locales a la nube
                                             </button>
-                                            <p className="text-[8px] text-gray-500 mt-2 italic">Usa esto si no ves tus horarios en otros dispositivos.</p>
+                                            <p className="text-[9px] text-gray-500 mt-3 italic leading-tight">Usa esto si has escrito horarios en este móvil y no los ves en otros sitios.</p>
                                         </div>
 
                                         {(isPermissionDenied || isDatabaseMissing) && (
                                             <div className="mt-4 pt-4 border-t border-gray-800">
                                                 <p className="mb-4 text-gray-300 leading-relaxed text-center">
                                                     {isDatabaseMissing 
-                                                        ? 'Entra en Firebase y dale al botón "Crear base de datos".' 
-                                                        : 'Tu base de datos está en modo de Producción. Debes actualizar las reglas.'}
+                                                        ? 'Tu base de datos no ha sido creada en Firebase todavía.' 
+                                                        : 'Faltan permisos de escritura en las reglas de Firestore.'}
                                                 </p>
                                                 
                                                 {isPermissionDenied && (
@@ -132,7 +152,7 @@ service cloud.firestore {
                                                             onClick={() => setShowRules(!showRules)}
                                                             className="w-full mb-2 bg-blue-600/20 text-blue-400 py-2 rounded-lg text-[10px] font-bold border border-blue-500/30"
                                                         >
-                                                            {showRules ? 'OCULTAR REGLAS' : 'VER REGLAS PARA COPIAR'}
+                                                            {showRules ? 'OCULTAR REGLAS' : 'VER REGLAS DE SEGURIDAD'}
                                                         </button>
                                                         {showRules && (
                                                             <div className="relative">
@@ -157,20 +177,25 @@ service cloud.firestore {
                                                         href={consoleUrl} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer"
-                                                        className="block w-full bg-red-600 hover:bg-red-500 text-center py-2.5 rounded-xl font-black text-white transition-colors uppercase text-[10px]"
+                                                        className="block w-full bg-red-600 hover:bg-red-500 text-center py-3 rounded-xl font-black text-white transition-colors uppercase text-[10px] shadow-lg"
                                                     >
                                                         ABRIR CONSOLA FIREBASE
                                                     </a>
                                                 )}
                                             </div>
                                         )}
-                                        <button onClick={onConfigureApi} className="mt-4 w-full text-gray-500 hover:text-white text-[9px] uppercase font-bold tracking-widest border-t border-gray-800 pt-2">Cambiar Configuración Cloud</button>
+                                        <button 
+                                            onClick={() => { onConfigureApi(); setIsMenuOpen(false); }} 
+                                            className="mt-4 w-full text-gray-500 hover:text-white text-[9px] uppercase font-bold tracking-widest border-t border-gray-800 pt-3"
+                                        >
+                                            Cambiar Configuración Cloud
+                                        </button>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         ) : (
-                            <button onClick={onConfigureApi} className="text-xs text-yellow-500 flex items-center space-x-1 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors">
-                                <Cog6ToothIcon className="w-3 h-3" />
+                            <button onClick={onConfigureApi} className="text-xs text-yellow-500 flex items-center space-x-1 bg-yellow-500/10 px-4 py-2 rounded-xl border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors font-bold uppercase tracking-tighter">
+                                <Cog6ToothIcon className="w-4 h-4" />
                                 <span>Configurar Nube</span>
                             </button>
                         )}
