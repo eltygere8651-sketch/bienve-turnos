@@ -1,42 +1,24 @@
+
 <!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#111827">
     <link rel="manifest" href="/manifest.json">
     <title>Bienve App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Custom scrollbar for a more modern look */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #1f2937; /* bg-gray-800 */
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #4b5563; /* bg-gray-600 */
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #6b7280; /* bg-gray-500 */
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes fadeInScaleUp {
-        from { opacity: 0; transform: scale(0.95); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      .animate-fade-in {
-        animation: fadeIn 0.2s ease-out forwards;
-      }
-      .animate-fade-in-scale-up {
-        animation: fadeInScaleUp 0.2s ease-out forwards;
-      }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #1f2937; }
+      ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fadeInScaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+      .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+      .animate-fade-in-scale-up { animation: fadeInScaleUp 0.2s ease-out forwards; }
+      body { -webkit-tap-highlight-color: transparent; }
     </style>
 <script type="importmap">
 {
@@ -53,18 +35,18 @@
 }
 </script>
 </head>
-  <body class="bg-gray-900 text-gray-100">
+  <body class="bg-gray-900 text-gray-100 overscroll-none">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
     <script>
+      // Registro de Service Worker optimizado para evitar problemas de origen cruzado
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.ts')
-            .then(registration => {
-              console.log('ServiceWorker registration successful with scope: ', registration.scope);
-            })
-            .catch(error => {
-              console.log('ServiceWorker registration failed: ', error);
+          // Usamos una ruta relativa sin el slash inicial para mantenernos en el mismo origen/subdominio
+          navigator.serviceWorker.register('service-worker.ts', { scope: './' })
+            .then(reg => console.log('SW registrado en el subdominio:', reg.scope))
+            .catch(err => {
+              console.warn('Registro de SW omitido (entorno de desarrollo o restricción de origen):', err.message);
             });
         });
       }

@@ -5,7 +5,7 @@ interface LoginProps {
     onLogin: () => void;
 }
 
-// Credenciales fijas para el administrador
+// Credenciales fijas para el administrador solicitadas por el usuario
 const ADMIN_USERNAME = 'nefta';
 const ADMIN_PASSWORD = '2020';
 
@@ -16,7 +16,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     
     const handleLoginSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        if (username.trim() === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
             setError('');
             onLogin();
         } else {
@@ -28,13 +28,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center p-4 animate-fade-in">
             <div className="w-full max-w-sm mx-auto">
                 <div className="flex justify-center mb-8">
-                    <LogoIcon className="w-20 h-20" />
+                    <LogoIcon className="w-20 h-20" title="Bienve App Logo" />
                 </div>
                 <div className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700 animate-fade-in-scale-up">
                     <h1 className="text-3xl font-bold text-center mb-2 bg-clip-text text-transparent bg-gradient-to-r from-red-500 to-red-700">
                         Bienve App
                     </h1>
-                    <p className="text-center text-gray-400 mb-8">Inicia sesión para continuar</p>
+                    <p className="text-center text-gray-400 mb-8 font-medium">Panel de Administración</p>
                     
                     <form onSubmit={handleLoginSubmit} className="space-y-6">
                         <div>
@@ -46,7 +46,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                                className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition outline-none"
                                 required
                                 autoFocus
                                 autoComplete="username"
@@ -61,24 +61,27 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                                className="w-full bg-gray-900 border-2 border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition outline-none"
                                 required
                                 autoComplete="current-password"
                             />
                         </div>
 
                         {error && (
-                            <p className="text-red-400 text-sm text-center">{error}</p>
+                            <p className="text-red-400 text-sm text-center font-medium animate-pulse">{error}</p>
                         )}
 
                         <button
                             type="submit"
-                            className="w-full px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-transform transform hover:scale-105 duration-300"
+                            className="w-full px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg shadow-lg transition-all transform hover:scale-[1.02] active:scale-95 duration-200"
                         >
                             Acceder
                         </button>
                     </form>
                 </div>
+                <p className="text-center text-gray-500 text-xs mt-8">
+                    © {new Date().getFullYear()} Bienve App - Acceso Restringido
+                </p>
             </div>
         </div>
     );
