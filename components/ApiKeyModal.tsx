@@ -59,17 +59,17 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave, onCancel }) => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
                         </div>
-                        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">Bienve App Cloud</h2>
-                        <p className="text-gray-400 text-sm">Vincular base de datos de Firebase</p>
+                        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">Configuración Nube</h2>
+                        <p className="text-gray-400 text-sm italic">Vincula tu base de datos Firebase</p>
                     </div>
                     
                     <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4">
                         <h4 className="text-blue-400 text-xs font-bold uppercase mb-2 flex items-center gap-2">
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
-                            Ayuda Rápida
+                            Instrucciones
                         </h4>
                         <p className="text-gray-300 text-[11px] leading-relaxed">
-                            Copia el código de tu consola de Firebase (Ajustes &rarr; Tus aplicaciones) y pégalo aquí debajo. La sincronización será automática.
+                            Copia el código de tu consola de Firebase (Ajustes &rarr; Tus aplicaciones) y pégalo aquí debajo. La sincronización entre dispositivos será instantánea.
                         </p>
                     </div>
 
@@ -90,7 +90,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave, onCancel }) => {
                             type="submit" 
                             className="w-full px-6 py-4 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl shadow-xl transition transform active:scale-95 uppercase tracking-widest text-sm"
                         >
-                            Vincular Nube
+                            Vincular Firebase
                         </button>
                         {onCancel && (
                             <button 
@@ -98,7 +98,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ onSave, onCancel }) => {
                                 onClick={onCancel}
                                 className="text-gray-500 text-xs hover:text-white transition py-2 font-bold uppercase tracking-widest"
                             >
-                                Continuar sin cambios
+                                Cancelar
                             </button>
                         )}
                     </div>

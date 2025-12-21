@@ -1,7 +1,7 @@
 
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'bienve-app-v9'; 
+const CACHE_NAME = 'bienve-app-v10'; 
 const urlsToCache = [
   './',
   './index.html',
@@ -38,7 +38,7 @@ sw.addEventListener('fetch', (event: FetchEvent) => {
   
   const url = event.request.url;
   
-  // CRÍTICO: No cachear NUNCA archivos de código fuente para evitar versiones obsoletas
+  // Evitar cachear scripts de lógica para asegurar que el usuario vea la última compilación
   if (url.includes('.tsx') || url.includes('.ts') || url.includes('.map') || url.includes('index.tsx')) {
     event.respondWith(fetch(event.request));
     return;
