@@ -12,10 +12,7 @@ const parseTimeToHours = (timeStr: string): number => {
 
     const trimmedStr = timeStr.trim().toUpperCase();
     
-    // Prevent empty strings from being parsed as 0
     if (trimmedStr === '') return NaN;
-
-    // Handle "Cierre"
     if (trimmedStr === 'C') return 24;
     
     // Safety check: a time token shouldn't contain a range separator here
@@ -72,43 +69,47 @@ const createShiftPart = (start: number, end: number): ShiftPart => {
     
     // Logic for crossing midnight:
     // If End < Start (e.g. 20 to 1), add 24 to End.
-    // Special case: 20 to 00 (0) -> 0 < 20 -> 24. Diff 4.
+    // Example: 20 to 1 -> 1 < 20 -> 25. 25-20 = 5 hours.
+    // Example: 20 to 00 -> 0 < 20 -> 24. 24-20 = 4 hours.
     if (endTime < start) {
         endTime += 24;
     }
-    // Handle "00" explicitly as 24 if it's the end time (e.g. 19:30 to 00)
-    // Note: 19.5 to 0. 0 < 19.5 is true, so it becomes 24.
-    // But if start is 0 (00:00 to 08:00), 8 !< 0, stays 8. Correct.
+    // Explicitly handle 00 as 24 if it is the end time and start is not 0
+    else if (endTime === 0 && start > 0) {
+        endTime = 24;
+    }
     
     return { start, end: endTime };
 };
 
 /**
  * Parses a shift string into parts.
- * Handles mixed formats: "12-16", "13:30 17:30", "20-C", "19:30 00:30"
+ * Handles mixed formats robustly: "12-16:30 20-00", "12-17:30 20-1"
  */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
 
-    // Normalize spacing around hyphens: "20 - 1" -> "20-1"
-    const normalizedShift = shift.replace(/\s*-\s*/g, '-').trim();
+    // Pre-process: Ensure space around distinct ranges if user forgot them (heuristic)
+    // but primarily replace flexible hyphen spacing with a standard hyphen
+    let normalizedShift = shift.replace(/\s*-\s*/g, '-').trim();
+    
     if (!normalizedShift) return [];
     
-    // Split by spaces to get tokens
+    // Split by spaces to get tokens. 
+    // Example: "12-16:30 20-1" -> ["12-16:30", "20-1"]
     const tokens = normalizedShift.split(/\s+/);
     const parts: ShiftPart[] = [];
 
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
 
-        // Case 1: Token is an explicit range "Start-End" (e.g. "12-16")
+        // Case 1: Token is an explicit range "Start-End" (e.g. "12-16", "20-1")
         if (token.includes('-')) {
             const rangeParts = token.split('-');
             if (rangeParts.length === 2) {
                 const startStr = rangeParts[0];
                 const endStr = rangeParts[1];
 
-                // FIX: Strict check against empty strings to avoid parsing "20-" as valid
                 if (startStr !== '' && endStr !== '') {
                     const start = parseTimeToHours(startStr);
                     const end = parseTimeToHours(endStr);
@@ -121,7 +122,6 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
         }
         // Case 2: Token is likely a Start time of a space-separated pair (e.g. "13:30" followed by "17:30")
         else {
-            // Check if there is a next token available
             if (i + 1 < tokens.length) {
                 const nextToken = tokens[i + 1];
                 
