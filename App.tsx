@@ -182,6 +182,52 @@ const App: React.FC = () => {
         }
     };
 
+    // --- Generate Temp Data ---
+    const handleGenerateTempData = () => {
+        const year = new Date().getFullYear();
+        const start = new Date(year, 11, 1); // 1 de Diciembre (Mes 11 es Dic)
+        const end = new Date(year, 11, 28); // 28 de Diciembre
+        
+        setSchedule(prevSchedule => {
+            const newSchedule = { ...prevSchedule };
+            let loopDate = new Date(start);
+
+            while (loopDate <= end) {
+                const wId = getWeekId(loopDate);
+                
+                // Si la semana no existe, la creamos
+                if (!newSchedule[wId]) {
+                    const weekDaysForId = getWeekDays(loopDate);
+                    newSchedule[wId] = weekDaysForId.map(d => ({
+                        date: d,
+                        shift: '',
+                        status: DayStatus.Work
+                    }));
+                }
+
+                // Encontramos el día específico en esa semana
+                const dayStr = loopDate.toDateString();
+                const dayIndex = newSchedule[wId].findIndex(d => d.date.toDateString() === dayStr);
+
+                if (dayIndex !== -1) {
+                    // Asignamos un turno genérico
+                    newSchedule[wId][dayIndex] = {
+                        ...newSchedule[wId][dayIndex],
+                        shift: '10-14 17-21',
+                        status: DayStatus.Work
+                    };
+                }
+
+                // Avanzamos al siguiente día
+                loopDate.setDate(loopDate.getDate() + 1);
+            }
+            return newSchedule;
+        });
+
+        setCurrentDate(start); // Movemos la vista al inicio de los datos generados
+        alert("Generados turnos del 1 al 28 de Diciembre.");
+    };
+
     // --- Date & Schedule Logic ---
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
@@ -297,6 +343,8 @@ const App: React.FC = () => {
                         day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
                     const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
                     const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
+                    
+                    // Allow negative overtime to compensate for other weeks
                     overtimeBalanceMonth += (workHoursInWeek - weeklyTarget);
                 }
                 processedWeekIds.add(weekId);
@@ -350,6 +398,8 @@ const App: React.FC = () => {
                              day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
                         const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
                         const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
+                        
+                        // Allow negative overtime to compensate for other weeks
                         overtimeBalancePeriod += (workHoursInWeek - weeklyTarget);
                     }
                     processedWeekIds.add(weekId);
@@ -404,6 +454,7 @@ const App: React.FC = () => {
                 isDownloadingMonth={isDownloadingMonth}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
                 isDownloadingCustomPeriod={isDownloadingCustomPeriod}
+                onGenerateTempData={handleGenerateTempData}
             />
 
             {editingDay && (
