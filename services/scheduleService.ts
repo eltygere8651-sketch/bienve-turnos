@@ -14,7 +14,7 @@ const parseTimeToHours = (timeStr: string): number => {
     const trimmedStr = timeStr.trim().toUpperCase().replace(/,/g, '.');
     
     if (trimmedStr === '') return NaN;
-    if (trimmedStr === 'C' || trimmedStr === 'CIERRE') return 24;
+    if (trimmedStr === 'C' || trimmedStr === 'CIERRE') return 24; // Treat Cierre as 24:00 (midnight) or 00:00 next day conceptually
     
     // Safety check: a time token shouldn't contain a range separator here
     if (trimmedStr.includes('-')) return NaN;
@@ -44,17 +44,12 @@ const parseTimeToHours = (timeStr: string): number => {
             const fractionalStr = parts[1];
             
             // Critical Fix: Ambiguity between 17.5 (17:30) and 17.50 (17:50).
-            // Logic:
-            // - If length is 2 (e.g., .30, .50), treat as minutes directly.
-            // - If length is 1 (e.g., .5), treat as mathematical fraction (0.5h = 30m).
-            
             if (fractionalStr.length === 2) {
                 const minutes = Number(fractionalStr);
                 if (!isNaN(hours) && !isNaN(minutes) && minutes < 60) {
                      return hours + (minutes / 60);
                 }
             }
-            // Standard float fallback (17.5 -> 17.5h)
             return Number(trimmedStr);
         }
     }
@@ -87,18 +82,12 @@ const createShiftPart = (start: number, end: number): ShiftPart => {
 
 /**
  * Parses a shift string into parts.
- * Handles mixed formats robustly: 
- * - "12-16 20-23" (Standard)
- * - "12-16-20-23" (Mashed ranges - previously caused bugs)
- * - "12 16 20 23" (Space separated pairs)
- * - "12:30-16:30" (Time format)
+ * Restored to standard parsing logic.
  */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
 
     // Pre-process: 
-    // 1. Replace various dash types with hyphen.
-    // 2. Remove spaces around hyphens (e.g. "20 - 1" -> "20-1").
     let normalizedShift = shift
         .replace(/[–—]/g, '-') 
         .replace(/\s*-\s*/g, '-')
@@ -112,48 +101,19 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
 
-        // Case 1: Token contains dashes (Ranges)
         if (token.includes('-')) {
-            // FIX: Handle multiple ranges mashed together (e.g., "12-16-20-23")
             const subTokens = token.split('-');
             
-            // We expect pairs: 0-1, 2-3, etc.
-            // If we have odd number of tokens > 1 (e.g. 12-16-20), the last one is ignored or needs context.
-            // We iterate by 2s.
             for (let j = 0; j < subTokens.length - 1; j += 2) {
                 const startStr = subTokens[j];
-                const endStr = subTokens[j+1]; // This exists because loop goes to length-1
+                const endStr = subTokens[j+1]; 
                 
-                if (startStr) {
+                if (startStr && endStr) {
                     const start = parseTimeToHours(startStr);
-                    let end = NaN;
-
-                    // Handle "20-" (open ended implies close)
-                    if (!endStr || endStr.trim() === '') {
-                        end = 24; 
-                    } else {
-                        end = parseTimeToHours(endStr);
-                    }
+                    const end = parseTimeToHours(endStr);
 
                     if (!isNaN(start) && !isNaN(end)) {
                         parts.push(createShiftPart(start, end));
-                    }
-                }
-            }
-        }
-        // Case 2: Token is likely a Start time of a space-separated pair (e.g. "13:30" followed by "17:30")
-        else {
-            if (i + 1 < tokens.length) {
-                const nextToken = tokens[i + 1];
-                
-                // Ensure the next token isn't a range itself (e.g. "12 16-20" -> 12 shouldn't consume 16-20)
-                if (!nextToken.includes('-')) {
-                    const start = parseTimeToHours(token);
-                    const end = parseTimeToHours(nextToken);
-
-                    if (!isNaN(start) && !isNaN(end)) {
-                        parts.push(createShiftPart(start, end));
-                        i++; 
                     }
                 }
             }

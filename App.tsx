@@ -23,11 +23,6 @@ import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
-// Helper to ensure consistent YYYY-MM-DD keys regardless of time/timezone
-const getDayKey = (date: Date): string => {
-    return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())).toISOString().slice(0, 10);
-};
-
 const App: React.FC = () => {
     // --- Authentication State (App Local) ---
     const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -190,8 +185,8 @@ const App: React.FC = () => {
     // --- Generate Temp Data ---
     const handleGenerateTempData = () => {
         const year = new Date().getFullYear();
-        const start = new Date(year, 11, 1); // 1 de Diciembre (Mes 11 es Dic)
-        const end = new Date(year, 11, 28); // 28 de Diciembre
+        const start = new Date(year, 11, 1); // 1 de Diciembre
+        const end = new Date(year, 11, 28); 
         
         setSchedule(prevSchedule => {
             const newSchedule = { ...prevSchedule };
@@ -200,7 +195,6 @@ const App: React.FC = () => {
             while (loopDate <= end) {
                 const wId = getWeekId(loopDate);
                 
-                // Si la semana no existe, la creamos
                 if (!newSchedule[wId]) {
                     const weekDaysForId = getWeekDays(loopDate);
                     newSchedule[wId] = weekDaysForId.map(d => ({
@@ -210,12 +204,10 @@ const App: React.FC = () => {
                     }));
                 }
 
-                // Encontramos el día específico en esa semana
                 const dayStr = loopDate.toDateString();
                 const dayIndex = newSchedule[wId].findIndex(d => d.date.toDateString() === dayStr);
 
                 if (dayIndex !== -1) {
-                    // Asignamos un turno genérico
                     newSchedule[wId][dayIndex] = {
                         ...newSchedule[wId][dayIndex],
                         shift: '10-14 17-21',
@@ -223,13 +215,12 @@ const App: React.FC = () => {
                     };
                 }
 
-                // Avanzamos al siguiente día
                 loopDate.setDate(loopDate.getDate() + 1);
             }
             return newSchedule;
         });
 
-        setCurrentDate(start); // Movemos la vista al inicio de los datos generados
+        setCurrentDate(start);
         alert("Generados turnos del 1 al 28 de Diciembre.");
     };
 
@@ -237,34 +228,24 @@ const App: React.FC = () => {
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
+    // Restaurado: Uso simple de toDateString() como funcionaba antes
     const weekDays = useMemo(() => {
         const days = getWeekDays(currentDate);
         if (!schedule[weekId]) {
             return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
         }
-        const scheduledDaysMap = new Map();
-        schedule[weekId].forEach(d => {
-             const key = getDayKey(d.date); // Use consistent key
-             scheduledDaysMap.set(key, d);
-        });
-
+        
+        // Mapeo simple basado en toDateString para evitar líos de UTC
         return days.map(date => {
-            const key = getDayKey(date); // Use consistent key
-            const found = scheduledDaysMap.get(key);
-            if (found) {
-                return { 
-                    ...found, 
-                    date: date 
-                };
-            }
-            return { date, shift: '', status: DayStatus.Work };
+            const found = schedule[weekId].find(d => d.date.toDateString() === date.toDateString());
+            return found ? { ...found, date: date } : { date, shift: '', status: DayStatus.Work };
         });
     }, [currentDate, schedule, weekId]);
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
             const newWeekDays = weekDays.map(d => {
-                if (getDayKey(d.date) === getDayKey(updatedDay.date)) {
+                if (d.date.toDateString() === updatedDay.date.toDateString()) {
                     return updatedDay;
                 }
                 return d;
@@ -307,6 +288,81 @@ const App: React.FC = () => {
     };
 
     // --- Report Downloads ---
+    
+    // Función auxiliar para calcular horas en un periodo arbitrario usando lógica simple
+    const calculatePeriodData = (days: Date[]) => {
+        let totalH = 0;
+        let totalOvertime = 0;
+        
+        // Agrupar días por semana para calcular horas extras semanales y permitir compensación
+        const daysByWeek: { [key: string]: Day[] } = {};
+
+        days.forEach(date => {
+            const wId = getWeekId(date);
+            if (!daysByWeek[wId]) daysByWeek[wId] = [];
+            
+            // Buscar en el horario existente usando toDateString (Restaurado)
+            const weekData = schedule[wId];
+            const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
+            
+            // Usar el día encontrado o crear uno vacío por defecto
+            const dayToUse = foundDay || { date, shift: '', status: DayStatus.Work };
+            daysByWeek[wId].push(dayToUse);
+        });
+
+        // Iterar por cada semana encontrada en el rango
+        Object.keys(daysByWeek).forEach(wId => {
+            const weekDaysData = daysByWeek[wId];
+            
+            // Solo si la semana tiene datos relevantes (evitar semanas vacías si no se cargaron)
+            // Pero debemos considerar todos los días pasados para sumar sus horas
+            
+            // 1. Calcular horas trabajadas en ESTOS días de la semana
+            const weekHours = weekDaysData.reduce((acc, day) => {
+                if (day.status === DayStatus.Work) {
+                    return acc + calculateHoursFromShift(day.shift);
+                }
+                return acc;
+            }, 0);
+            
+            // Para el cálculo de horas extras, necesitamos el contexto de la semana COMPLETA
+            // Si el periodo corta la semana, el cálculo de extras puede ser parcial, 
+            // pero para ser fieles a la "semana", deberíamos ver si tenemos la semana completa en memoria.
+            
+            // Estrategia Robust: Recuperar la semana completa del state si existe
+            const fullWeekData = schedule[wId];
+            
+            if (fullWeekData) {
+                const fullWeekWorkHours = fullWeekData.reduce((acc, day) => 
+                     day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
+                
+                const daysOff = fullWeekData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                const extraDaysOff = Math.max(0, daysOff - 2);
+                const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+                
+                // Aquí está la clave: Overtime de la semana (positivo o negativo)
+                // Al sumar esto al totalOvertime, permitimos la compensación.
+                // PERO, solo sumamos UNA VEZ por semana. 
+                // El problema de iterar días es que sumaríamos esto múltiples veces.
+                // Por eso iteramos por `daysByWeek` keys.
+                
+                totalOvertime += (fullWeekWorkHours - weeklyTarget);
+            }
+            
+            // Total Hours es simplemente la suma de las horas de los días seleccionados
+            totalH += weekHours;
+        });
+
+        // Aplanar todos los días para el PDF
+        const allDays = Object.values(daysByWeek).flat().sort((a,b) => a.date.getTime() - b.date.getTime());
+        
+        return {
+            periodDays: allDays.filter(d => d.shift || d.status !== DayStatus.Work), // Filtrar vacíos para el PDF
+            totalHours: totalH,
+            overtimeHours: totalOvertime
+        };
+    };
+
     const handleDownload = async () => {
         setIsDownloading(true);
         try { await downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours }); } 
@@ -318,48 +374,14 @@ const App: React.FC = () => {
         setIsDownloadingMonth(true);
         try {
             const daysInMonth = getDaysInMonth(currentDate);
-             const scheduleMap = new Map<string, Day>();
-            Object.values(schedule).flat().forEach((day: Day) => {
-                const dayKey = getDayKey(day.date); // Consistent Key
-                scheduleMap.set(dayKey, day);
-            });
-    
-             const totalHoursMonth = daysInMonth.reduce((acc, date) => {
-                const dayKey = getDayKey(date); // Consistent Key
-                const day = scheduleMap.get(dayKey);
-                if (day && day.status === DayStatus.Work) return acc + calculateHoursFromShift(day.shift);
-                return acc;
-            }, 0);
+            const { periodDays, totalHours, overtimeHours } = calculatePeriodData(daysInMonth);
             
-            let overtimeBalanceMonth = 0.0;
-            const processedWeekIds = new Set<string>();
-            daysInMonth.forEach(dateInMonth => {
-                 const weekId = getWeekId(dateInMonth);
-                if (processedWeekIds.has(weekId)) return;
-                const fullWeekDays = getWeekDays(dateInMonth);
-                const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
-                    const dayKey = getDayKey(dateOfWeek); // Consistent Key
-                    return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
-                });
-                const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
-                if (isWorkWeek) {
-                    const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => 
-                        day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
-                    const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
-                    const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
-                    
-                    // Allow negative overtime to compensate for other weeks
-                    overtimeBalanceMonth += (workHoursInWeek - weeklyTarget);
-                }
-                processedWeekIds.add(weekId);
+            await downloadMonthScheduleAsPdf({ 
+                monthDays: periodDays, 
+                currentDate, 
+                totalHours, 
+                overtimeHours 
             });
-
-            const monthDaysForPdf = daysInMonth.map(date => {
-                const dayKey = getDayKey(date);
-                return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
-            }).filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
-
-            await downloadMonthScheduleAsPdf({ monthDays: monthDaysForPdf, currentDate, totalHours: totalHoursMonth, overtimeHours: overtimeBalanceMonth });
 
         } catch (e) { console.error(e); alert("Error PDF Mensual"); } 
         finally { setIsDownloadingMonth(false); }
@@ -375,42 +397,16 @@ const App: React.FC = () => {
                 periodDates.push(new Date(loopDate));
                 loopDate.setDate(loopDate.getDate() + 1);
             }
-            const scheduleMap = new Map<string, Day>();
-            Object.values(schedule).flat().forEach((day: Day) => {
-                const dayKey = getDayKey(day.date); // Consistent Key
-                scheduleMap.set(dayKey, day);
+            
+            const { periodDays, totalHours, overtimeHours } = calculatePeriodData(periodDates);
+
+            await downloadCustomPeriodPdf({ 
+                periodDays, 
+                startDate, 
+                endDate, 
+                totalHours, 
+                overtimeHours 
             });
-            const periodDaysWithData = periodDates.map(date => {
-                const dayKey = getDayKey(date); // Consistent Key
-                return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
-            });
-            const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => 
-                 (day && day.status === DayStatus.Work) ? acc + calculateHoursFromShift(day.shift) : acc, 0);
-             let overtimeBalancePeriod = 0.0;
-            const processedWeekIds = new Set<string>();
-            periodDaysWithData.forEach(dayInPeriod => {
-                const weekId = getWeekId(dayInPeriod.date);
-                if (!processedWeekIds.has(weekId)) {
-                    const fullWeekDays = getWeekDays(dayInPeriod.date);
-                    const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
-                        const dayKey = getDayKey(dateOfWeek); // Consistent Key
-                        return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
-                    });
-                     const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
-                    if (isWorkWeek) {
-                        const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => 
-                             day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
-                        const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
-                        const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
-                        
-                        // Allow negative overtime to compensate for other weeks
-                        overtimeBalancePeriod += (workHoursInWeek - weeklyTarget);
-                    }
-                    processedWeekIds.add(weekId);
-                }
-            });
-            const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
-            await downloadCustomPeriodPdf({ periodDays: periodDaysForPdf, startDate, endDate, totalHours: totalHoursPeriod, overtimeHours: overtimeBalancePeriod });
         } catch (e) { console.error(e); alert("Error PDF Personalizado"); }
         finally { setIsDownloadingCustomPeriod(false); }
     };
