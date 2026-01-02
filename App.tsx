@@ -23,6 +23,11 @@ import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
+// Helper to ensure consistent YYYY-MM-DD keys regardless of time/timezone
+const getDayKey = (date: Date): string => {
+    return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())).toISOString().slice(0, 10);
+};
+
 const App: React.FC = () => {
     // --- Authentication State (App Local) ---
     const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -239,13 +244,12 @@ const App: React.FC = () => {
         }
         const scheduledDaysMap = new Map();
         schedule[weekId].forEach(d => {
-             const dDate = new Date(d.date);
-             const key = dDate.toISOString().slice(0, 10);
+             const key = getDayKey(d.date); // Use consistent key
              scheduledDaysMap.set(key, d);
         });
 
         return days.map(date => {
-            const key = date.toISOString().slice(0, 10);
+            const key = getDayKey(date); // Use consistent key
             const found = scheduledDaysMap.get(key);
             if (found) {
                 return { 
@@ -260,7 +264,7 @@ const App: React.FC = () => {
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
             const newWeekDays = weekDays.map(d => {
-                if (d.date.toISOString().slice(0, 10) === updatedDay.date.toISOString().slice(0, 10)) {
+                if (getDayKey(d.date) === getDayKey(updatedDay.date)) {
                     return updatedDay;
                 }
                 return d;
@@ -316,12 +320,12 @@ const App: React.FC = () => {
             const daysInMonth = getDaysInMonth(currentDate);
              const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
-                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                const dayKey = getDayKey(day.date); // Consistent Key
                 scheduleMap.set(dayKey, day);
             });
     
              const totalHoursMonth = daysInMonth.reduce((acc, date) => {
-                const dayKey = date.toISOString().slice(0, 10);
+                const dayKey = getDayKey(date); // Consistent Key
                 const day = scheduleMap.get(dayKey);
                 if (day && day.status === DayStatus.Work) return acc + calculateHoursFromShift(day.shift);
                 return acc;
@@ -334,7 +338,7 @@ const App: React.FC = () => {
                 if (processedWeekIds.has(weekId)) return;
                 const fullWeekDays = getWeekDays(dateInMonth);
                 const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
-                    const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                    const dayKey = getDayKey(dateOfWeek); // Consistent Key
                     return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
                 });
                 const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
@@ -351,7 +355,7 @@ const App: React.FC = () => {
             });
 
             const monthDaysForPdf = daysInMonth.map(date => {
-                const dayKey = date.toISOString().slice(0, 10);
+                const dayKey = getDayKey(date);
                 return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
             }).filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
 
@@ -373,11 +377,11 @@ const App: React.FC = () => {
             }
             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
-                const dayKey = new Date(day.date).toISOString().slice(0, 10);
+                const dayKey = getDayKey(day.date); // Consistent Key
                 scheduleMap.set(dayKey, day);
             });
             const periodDaysWithData = periodDates.map(date => {
-                const dayKey = date.toISOString().slice(0, 10);
+                const dayKey = getDayKey(date); // Consistent Key
                 return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
             });
             const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => 
@@ -389,7 +393,7 @@ const App: React.FC = () => {
                 if (!processedWeekIds.has(weekId)) {
                     const fullWeekDays = getWeekDays(dayInPeriod.date);
                     const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
-                        const dayKey = dateOfWeek.toISOString().slice(0, 10);
+                        const dayKey = getDayKey(dateOfWeek); // Consistent Key
                         return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
                     });
                      const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
