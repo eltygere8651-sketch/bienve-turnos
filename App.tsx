@@ -228,15 +228,15 @@ const App: React.FC = () => {
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
-    // Restaurado: Uso simple de toDateString() como funcionaba antes
+    // Original simple mapping without UTC complexity
     const weekDays = useMemo(() => {
         const days = getWeekDays(currentDate);
         if (!schedule[weekId]) {
             return days.map(date => ({ date, shift: '', status: DayStatus.Work }));
         }
         
-        // Mapeo simple basado en toDateString para evitar líos de UTC
         return days.map(date => {
+            // Simple date string comparison is robust for local time apps
             const found = schedule[weekId].find(d => d.date.toDateString() === date.toDateString());
             return found ? { ...found, date: date } : { date, shift: '', status: DayStatus.Work };
         });
@@ -244,16 +244,20 @@ const App: React.FC = () => {
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
-            const newWeekDays = weekDays.map(d => {
+            // We need to use the weekId corresponding to the updated day, not necessarily the current view's weekId
+            const targetWeekId = getWeekId(updatedDay.date);
+            const currentWeekData = prevSchedule[targetWeekId] || getWeekDays(updatedDay.date).map(d => ({ date: d, shift: '', status: DayStatus.Work }));
+            
+            const newWeekDays = currentWeekData.map(d => {
                 if (d.date.toDateString() === updatedDay.date.toDateString()) {
                     return updatedDay;
                 }
                 return d;
             });
-            return { ...prevSchedule, [weekId]: newWeekDays };
+            return { ...prevSchedule, [targetWeekId]: newWeekDays };
         });
         setEditingDay(null);
-    }, [weekId, weekDays]);
+    }, [schedule]);
     
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => {
@@ -287,77 +291,51 @@ const App: React.FC = () => {
         setIsCalendarOpen(false);
     };
 
-    // --- Report Downloads ---
-    
-    // Función auxiliar para calcular horas en un periodo arbitrario usando lógica simple
+    // --- Report Logic ---
+    // Recalculates periods by summing weekly results to allow compensation
     const calculatePeriodData = (days: Date[]) => {
         let totalH = 0;
         let totalOvertime = 0;
         
-        // Agrupar días por semana para calcular horas extras semanales y permitir compensación
-        const daysByWeek: { [key: string]: Day[] } = {};
+        // 1. Identify all weeks involved in this period
+        const processedWeeks = new Set<string>();
+        const relevantDays: Day[] = [];
 
         days.forEach(date => {
             const wId = getWeekId(date);
-            if (!daysByWeek[wId]) daysByWeek[wId] = [];
             
-            // Buscar en el horario existente usando toDateString (Restaurado)
+            // Get day data
             const weekData = schedule[wId];
             const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
-            
-            // Usar el día encontrado o crear uno vacío por defecto
             const dayToUse = foundDay || { date, shift: '', status: DayStatus.Work };
-            daysByWeek[wId].push(dayToUse);
-        });
+            relevantDays.push(dayToUse);
 
-        // Iterar por cada semana encontrada en el rango
-        Object.keys(daysByWeek).forEach(wId => {
-            const weekDaysData = daysByWeek[wId];
-            
-            // Solo si la semana tiene datos relevantes (evitar semanas vacías si no se cargaron)
-            // Pero debemos considerar todos los días pasados para sumar sus horas
-            
-            // 1. Calcular horas trabajadas en ESTOS días de la semana
-            const weekHours = weekDaysData.reduce((acc, day) => {
-                if (day.status === DayStatus.Work) {
-                    return acc + calculateHoursFromShift(day.shift);
-                }
-                return acc;
-            }, 0);
-            
-            // Para el cálculo de horas extras, necesitamos el contexto de la semana COMPLETA
-            // Si el periodo corta la semana, el cálculo de extras puede ser parcial, 
-            // pero para ser fieles a la "semana", deberíamos ver si tenemos la semana completa en memoria.
-            
-            // Estrategia Robust: Recuperar la semana completa del state si existe
-            const fullWeekData = schedule[wId];
-            
-            if (fullWeekData) {
-                const fullWeekWorkHours = fullWeekData.reduce((acc, day) => 
-                     day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
+            if (dayToUse.status === DayStatus.Work) {
+                totalH += calculateHoursFromShift(dayToUse.shift);
+            }
+
+            // 2. Calculate Overtime PER WEEK (Full week context)
+            if (!processedWeeks.has(wId)) {
+                processedWeeks.add(wId);
                 
-                const daysOff = fullWeekData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
+                // Retrieve or generate full week
+                const fullWeekDays = weekData || getWeekDays(date).map(d => ({ date: d, shift: '', status: DayStatus.Work }));
+                
+                const fullWeekHours = fullWeekDays.reduce((acc, d) => 
+                    d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
+                
+                const daysOff = fullWeekDays.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
                 const extraDaysOff = Math.max(0, daysOff - 2);
                 const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
                 
-                // Aquí está la clave: Overtime de la semana (positivo o negativo)
-                // Al sumar esto al totalOvertime, permitimos la compensación.
-                // PERO, solo sumamos UNA VEZ por semana. 
-                // El problema de iterar días es que sumaríamos esto múltiples veces.
-                // Por eso iteramos por `daysByWeek` keys.
-                
-                totalOvertime += (fullWeekWorkHours - weeklyTarget);
+                // Allow negative overtime! This is the compensation logic.
+                const weekOvertime = fullWeekHours - weeklyTarget;
+                totalOvertime += weekOvertime;
             }
-            
-            // Total Hours es simplemente la suma de las horas de los días seleccionados
-            totalH += weekHours;
         });
 
-        // Aplanar todos los días para el PDF
-        const allDays = Object.values(daysByWeek).flat().sort((a,b) => a.date.getTime() - b.date.getTime());
-        
         return {
-            periodDays: allDays.filter(d => d.shift || d.status !== DayStatus.Work), // Filtrar vacíos para el PDF
+            periodDays: relevantDays.filter(d => d.shift || d.status !== DayStatus.Work),
             totalHours: totalH,
             overtimeHours: totalOvertime
         };
