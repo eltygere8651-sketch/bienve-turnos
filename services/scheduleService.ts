@@ -140,10 +140,6 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                     }
                 }
             }
-            
-            // If we have an odd token left over (e.g., 12-16-20), '20' is dangling.
-            // In a mashed string logic, it's safer to ignore it unless we look ahead, 
-            // but usually 12-16-20-23 is the error pattern.
         }
         // Case 2: Token is likely a Start time of a space-separated pair (e.g. "13:30" followed by "17:30")
         else {
@@ -157,7 +153,6 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
 
                     if (!isNaN(start) && !isNaN(end)) {
                         parts.push(createShiftPart(start, end));
-                        // Skip the next token since we consumed it as the 'end' time
                         i++; 
                     }
                 }
@@ -168,10 +163,30 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
     return parts;
 };
 
-
 export const calculateHoursFromShift = (shift: string): number => {
     const parts = parseShiftParts(shift);
     const rawTotal = parts.reduce((total, part) => total + (part.end - part.start), 0);
-    // Round to 2 decimals to avoid floating point weirdness (e.g. 14.4999999)
     return Math.round(rawTotal * 100) / 100;
+};
+
+// --- New Formatter Function for PDF ---
+export const formatTime = (decimalTime: number): string => {
+    let hours = Math.floor(decimalTime);
+    const minutes = Math.round((decimalTime - hours) * 60);
+
+    // Handle crossing midnight for display (e.g. 25h -> 01:00)
+    if (hours >= 24) hours -= 24;
+
+    const hStr = hours.toString().padStart(2, '0');
+    const mStr = minutes.toString().padStart(2, '0');
+    return `${hStr}:${mStr}`;
+};
+
+export const formatShift = (shift: string): string => {
+    const parts = parseShiftParts(shift);
+    if (parts.length === 0) return shift;
+
+    return parts.map(part => {
+        return `${formatTime(part.start)}-${formatTime(part.end)}`;
+    }).join(' ');
 };

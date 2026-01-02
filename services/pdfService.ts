@@ -1,9 +1,9 @@
 
-
 import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
 import { getWeekTitle, getMonthTitle, getWeekId } from '../utils/dateUtils';
 import { LOGO_SVG_STRING_PDF } from '../constants';
+import { formatShift } from './scheduleService';
 
 interface WeekPdfData {
     weekDays: Day[];
@@ -105,7 +105,8 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
         } else if (day.status === DayStatus.Holiday) {
             statusText = "Festivo";
         } else {
-            statusText = day.shift || 'Sin turno';
+            // Apply formatter here
+            statusText = day.shift ? formatShift(day.shift) : 'Sin turno';
         }
         doc.text(`${dayNames[index].padEnd(11)}: ${statusText}`, 20, yPos);
         yPos += 6.5;
@@ -187,7 +188,8 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
             } else if (day.status === DayStatus.Holiday) {
                 statusText = "Festivo";
             } else {
-                statusText = day.shift || 'Sin turno';
+                // Apply formatter here
+                statusText = day.shift ? formatShift(day.shift) : 'Sin turno';
             }
             
             const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
@@ -282,7 +284,8 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
             } else if (day.status === DayStatus.Holiday) {
                 statusText = "Festivo";
             } else {
-                statusText = day.shift || 'Sin turno';
+                // Apply formatter here
+                statusText = day.shift ? formatShift(day.shift) : 'Sin turno';
             }
             
             const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
