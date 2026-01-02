@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Day, Schedule, DayStatus } from './types';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Day, Schedule, DayStatus, FirebaseUser, FirebaseConfig } from './types';
 import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
 import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, downloadCustomPeriodPdf } from './services/pdfService';
@@ -14,26 +14,28 @@ import ManageTemplatesModal from './components/ManageTemplatesModal';
 import CustomPeriodModal from './components/CustomPeriodModal';
 import Login from './components/Login';
 import ConfirmModal from './components/ConfirmModal';
-import BackupModal from './components/BackupModal';
-import { exportScheduleToJson, parseAndValidateSchedule } from './services/dataService';
+import FirebaseConfigModal from './components/FirebaseConfigModal';
+
+import { saveFirebaseConfig, getFirebaseConfig, isFirebaseConfigured } from './services/apiKeyService';
+import { initFirebase, loginWithGoogle, logoutUser, subscribeToAuthChanges, subscribeToSchedule, saveScheduleToFirestore, testFirestoreConnection } from './services/firebaseService';
+import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
-const AUTO_BACKUP_STORAGE_KEY = 'bienveAppSchedule_auto_backup';
-const BACKUP_DATE_KEY = 'bienveApp_lastBackupDate';
 const AUTH_STORAGE_KEY = 'bienveAppIsAuthenticated';
 
 const App: React.FC = () => {
+    // --- Authentication State (App Local) ---
     const [isAuthenticated, setIsAuthenticated] = useState(() => {
         return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
     });
 
+    // --- Core Data State ---
     const [currentDate, setCurrentDate] = useState(new Date());
     const [schedule, setSchedule] = useState<Schedule>(() => {
         try {
             const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             if (savedSchedule) {
                 const parsed = JSON.parse(savedSchedule);
-                // Re-hydrate Date objects
                 Object.keys(parsed).forEach(weekId => {
                     parsed[weekId] = parsed[weekId].map((day: any) => ({
                         ...day,
@@ -48,6 +50,13 @@ const App: React.FC = () => {
         return {};
     });
 
+    // --- Firebase Integration State ---
+    const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+    const [isFirebaseConfigModalOpen, setIsFirebaseConfigModalOpen] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const isRemoteUpdate = useRef(false); // Flag to prevent infinite loops (Local -> Cloud -> Local -> Cloud)
+
+    // --- UI State ---
     const [editingDay, setEditingDay] = useState<Day | null>(null);
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
@@ -57,13 +66,13 @@ const App: React.FC = () => {
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-    const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
+    // Persist Local Login
     useEffect(() => {
         localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
     }, [isAuthenticated]);
     
-    // Save schedule to localStorage whenever it changes
+    // Persist Local Schedule
     useEffect(() => {
         try {
             localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
@@ -72,23 +81,125 @@ const App: React.FC = () => {
         }
     }, [schedule]);
 
-    // Automatic Daily Backup Logic
-    useEffect(() => {
-        try {
-            const today = new Date().toDateString();
-            const lastBackupDate = localStorage.getItem(BACKUP_DATE_KEY);
-            const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
+    // --- Firebase Logic ---
 
-            // If we have data, and we haven't backed up today yet, save a backup.
-            if (savedSchedule && savedSchedule !== '{}' && lastBackupDate !== today) {
-                localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, savedSchedule);
-                localStorage.setItem(BACKUP_DATE_KEY, today);
-                console.log("Automatic daily backup created successfully.");
+    // 1. Initialize Firebase on load if config exists
+    useEffect(() => {
+        if (isAuthenticated && isFirebaseConfigured()) {
+            const config = getFirebaseConfig();
+            if (config) {
+                try {
+                    initFirebase(config);
+                    // Subscribe to auth state changes
+                    const unsubscribeAuth = subscribeToAuthChanges((user) => {
+                        if (user) {
+                            setFirebaseUser({
+                                uid: user.uid,
+                                displayName: user.displayName,
+                                email: user.email,
+                                photoURL: user.photoURL
+                            });
+                        } else {
+                            setFirebaseUser(null);
+                        }
+                    });
+                    return () => unsubscribeAuth();
+                } catch (e) {
+                    console.error("Firebase init failed", e);
+                }
             }
-        } catch (error) {
-            console.error("Failed to perform auto-backup", error);
         }
-    }, []); // Empty dependency array ensures this runs only once on app mount
+    }, [isAuthenticated]);
+
+    // 2. Real-time Listener for Schedule (Cloud -> Local)
+    useEffect(() => {
+        if (firebaseUser?.uid) {
+            setIsSyncing(true);
+            const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
+                console.log("Remote schedule update received");
+                isRemoteUpdate.current = true; // Set flag
+                setSchedule(remoteSchedule); // Update local state
+                setIsSyncing(false);
+                
+                // Reset flag after a tick to allow local edits to resume triggering saves
+                setTimeout(() => {
+                    isRemoteUpdate.current = false;
+                }, 100);
+            });
+            return () => unsubscribeSchedule();
+        }
+    }, [firebaseUser?.uid]);
+
+    // 3. Save to Firestore (Local -> Cloud)
+    const debouncedSaveToFirestore = useDebouncedCallback(async (currentSchedule: Schedule, uid: string) => {
+        if (!uid) return;
+        setIsSyncing(true);
+        try {
+            await saveScheduleToFirestore(uid, currentSchedule);
+        } catch (e) {
+            console.error("Save to firestore failed", e);
+        } finally {
+            setIsSyncing(false);
+        }
+    }, 1000);
+
+    useEffect(() => {
+        // Only save if logged in AND it wasn't a remote update just now
+        if (firebaseUser?.uid && !isRemoteUpdate.current) {
+            debouncedSaveToFirestore(schedule, firebaseUser.uid);
+        }
+    }, [schedule, firebaseUser, debouncedSaveToFirestore]);
+
+
+    // --- Handlers ---
+
+    const handleFirebaseLogin = async () => {
+        if (!isFirebaseConfigured()) {
+            setIsFirebaseConfigModalOpen(true);
+            return;
+        }
+        try {
+            const config = getFirebaseConfig();
+            if (config) initFirebase(config);
+            await loginWithGoogle();
+        } catch (error: any) {
+            alert(error.message);
+        }
+    };
+
+    const handleFirebaseLogout = async () => {
+        await logoutUser();
+        setFirebaseUser(null);
+    };
+
+    const handleTestConnection = async () => {
+        if (!firebaseUser?.uid) return;
+        setIsSyncing(true);
+        try {
+            await testFirestoreConnection(firebaseUser.uid);
+            alert("✅ Conexión exitosa: Tus datos se guardan en la nube correctamente.");
+        } catch (error: any) {
+            console.error(error);
+            alert(`❌ Error de conexión: ${error.message || 'No se pudo contactar con Firestore.'}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleConfigSave = (config: FirebaseConfig) => {
+        saveFirebaseConfig(config);
+        setIsFirebaseConfigModalOpen(false);
+        // Attempt init immediately
+        try {
+            initFirebase(config);
+            // Trigger login flow immediately after config if desired, or let user click Connect again
+            handleFirebaseLogin(); 
+        } catch (e) {
+            alert("Error inicializando Firebase con esa configuración.");
+        }
+    };
+
+    // --- Date & Schedule Logic (Existing) ---
 
     const weekId = useMemo(() => getWeekId(currentDate), [currentDate]);
     
@@ -150,29 +261,23 @@ const App: React.FC = () => {
         setIsCalendarOpen(false);
     };
 
+    // --- Report Downloads ---
+
     const handleDownload = async () => {
         setIsDownloading(true);
         try {
-            await downloadScheduleAsPdf({
-                weekDays,
-                currentDate,
-                totalHours,
-                overtimeHours
-            });
+            await downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours });
         } catch (error) {
-            console.error("PDF Download failed:", error);
-            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF.");
-        } finally {
-            setIsDownloading(false);
-        }
+            console.error("PDF Error:", error);
+            alert("Error al generar PDF.");
+        } finally { setIsDownloading(false); }
     };
     
     const handleDownloadMonth = async () => {
         setIsDownloadingMonth(true);
         try {
             const daysInMonth = getDaysInMonth(currentDate);
-    
-            const scheduleMap = new Map<string, Day>();
+             const scheduleMap = new Map<string, Day>();
             Object.values(schedule).flat().forEach((day: Day) => {
                 const dayKey = new Date(day.date).toISOString().slice(0, 10);
                 scheduleMap.set(dayKey, day);
@@ -181,77 +286,50 @@ const App: React.FC = () => {
             const totalHoursMonth = daysInMonth.reduce((acc, date) => {
                 const dayKey = date.toISOString().slice(0, 10);
                 const day = scheduleMap.get(dayKey);
-                if (day && day.status === DayStatus.Work) {
-                    return acc + calculateHoursFromShift(day.shift);
-                }
+                if (day && day.status === DayStatus.Work) return acc + calculateHoursFromShift(day.shift);
                 return acc;
             }, 0);
-    
+
             let overtimeBalanceMonth = 0.0;
             const processedWeekIds = new Set<string>();
-    
             daysInMonth.forEach(dateInMonth => {
-                const weekId = getWeekId(dateInMonth);
-                if (processedWeekIds.has(weekId)) {
-                    return;
-                }
-    
+                 const weekId = getWeekId(dateInMonth);
+                if (processedWeekIds.has(weekId)) return;
+                
                 const fullWeekDays = getWeekDays(dateInMonth);
                 const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
                     const dayKey = dateOfWeek.toISOString().slice(0, 10);
                     return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
                 });
-
+                
                 const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
-
                 if (isWorkWeek) {
-                    const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
-                        if (day.status === DayStatus.Work) {
-                            return acc + calculateHoursFromShift(day.shift);
-                        }
-                        return acc;
-                    }, 0);
-
+                    const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => 
+                        day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
                     const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
-                    const extraDaysOff = Math.max(0, daysOff - 2);
-                    const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
-
+                    const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
                     overtimeBalanceMonth += (workHoursInWeek - weeklyTarget);
                 }
-                
                 processedWeekIds.add(weekId);
             });
-            
-            const totalOvertimeMonth = overtimeBalanceMonth;
-    
-            const monthDaysForPdf = daysInMonth
-                .map(date => {
-                    const dayKey = date.toISOString().slice(0, 10);
-                    return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
-                })
-                .filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
-    
-            await downloadMonthScheduleAsPdf({
-                monthDays: monthDaysForPdf,
-                currentDate,
-                totalHours: totalHoursMonth,
-                overtimeHours: totalOvertimeMonth
-            });
-    
+
+            const monthDaysForPdf = daysInMonth.map(date => {
+                const dayKey = date.toISOString().slice(0, 10);
+                return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
+            }).filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
+
+            await downloadMonthScheduleAsPdf({ monthDays: monthDaysForPdf, currentDate, totalHours: totalHoursMonth, overtimeHours: overtimeBalanceMonth });
         } catch (error) {
-            console.error("Monthly PDF Download failed:", error);
-            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del mes.");
-        } finally {
-            setIsDownloadingMonth(false);
-        }
+            console.error("Month PDF Error:", error);
+            alert("Error al generar PDF mensual.");
+        } finally { setIsDownloadingMonth(false); }
     };
     
     const handleDownloadCustomPeriod = async (startDate: Date, endDate: Date) => {
         setIsDownloadingCustomPeriod(true);
         setIsCustomPeriodModalOpen(false);
-
         try {
-            const periodDates: Date[] = [];
+             const periodDates: Date[] = [];
             let loopDate = new Date(startDate);
             while (loopDate <= endDate) {
                 periodDates.push(new Date(loopDate));
@@ -269,120 +347,45 @@ const App: React.FC = () => {
                 return scheduleMap.get(dayKey) || { date, shift: '', status: DayStatus.Work };
             });
     
-            const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => {
-                if (day && day.status === DayStatus.Work) {
-                    return acc + calculateHoursFromShift(day.shift);
-                }
-                return acc;
-            }, 0);
-    
-            const processedWeekIds = new Set<string>();
-            let overtimeBalancePeriod = 0.0;
+            const totalHoursPeriod = periodDaysWithData.reduce((acc, day) => 
+                 (day && day.status === DayStatus.Work) ? acc + calculateHoursFromShift(day.shift) : acc, 0);
 
+             let overtimeBalancePeriod = 0.0;
+            const processedWeekIds = new Set<string>();
             periodDaysWithData.forEach(dayInPeriod => {
                 const weekId = getWeekId(dayInPeriod.date);
-                
                 if (!processedWeekIds.has(weekId)) {
                     const fullWeekDays = getWeekDays(dayInPeriod.date);
                     const fullWeekDaysWithData = fullWeekDays.map(dateOfWeek => {
                         const dayKey = dateOfWeek.toISOString().slice(0, 10);
                         return scheduleMap.get(dayKey) || { date: dateOfWeek, shift: '', status: DayStatus.Work };
                     });
-
-                    const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
-
+                     const isWorkWeek = fullWeekDaysWithData.some(day => day.status === DayStatus.Work);
                     if (isWorkWeek) {
-                        const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => {
-                            if (day.status === DayStatus.Work) {
-                                return acc + calculateHoursFromShift(day.shift);
-                            }
-                            return acc;
-                        }, 0);
-
+                        const workHoursInWeek = fullWeekDaysWithData.reduce((acc, day) => 
+                             day.status === DayStatus.Work ? acc + calculateHoursFromShift(day.shift) : acc, 0);
                         const daysOff = fullWeekDaysWithData.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
-                        const extraDaysOff = Math.max(0, daysOff - 2);
-                        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
-
+                        const weeklyTarget = Math.max(0, 40 - (Math.max(0, daysOff - 2) * 8));
                         overtimeBalancePeriod += (workHoursInWeek - weeklyTarget);
                     }
-                    
                     processedWeekIds.add(weekId);
                 }
             });
-            
-            const totalOvertimePeriod = overtimeBalancePeriod;
-    
+
             const periodDaysForPdf = periodDaysWithData.filter(day => day.shift.trim() !== '' || day.status !== DayStatus.Work);
-
-            await downloadCustomPeriodPdf({
-                periodDays: periodDaysForPdf,
-                startDate,
-                endDate,
-                totalHours: totalHoursPeriod,
-                overtimeHours: totalOvertimePeriod
-            });
-    
+            await downloadCustomPeriodPdf({ periodDays: periodDaysForPdf, startDate, endDate, totalHours: totalHoursPeriod, overtimeHours: overtimeBalancePeriod });
         } catch (error) {
-            console.error("Custom Period PDF Download failed:", error);
-            alert(error instanceof Error ? error.message : "Ocurrió un error inesperado al generar el PDF del periodo personalizado.");
-        } finally {
-            setIsDownloadingCustomPeriod(false);
-        }
+            console.error("Custom PDF Error:", error);
+            alert("Error al generar reporte personalizado.");
+        } finally { setIsDownloadingCustomPeriod(false); }
     };
 
-    const handleLogin = () => {
-        setIsAuthenticated(true);
+    const handleLogin = () => { setIsAuthenticated(true); };
+    const handleLogout = () => { 
+        setIsAuthenticated(false); 
+        setIsLogoutModalOpen(false); 
+        logoutUser(); // Disconnect firebase
     };
-
-    const handleLogout = () => {
-        setIsAuthenticated(false);
-        setIsLogoutModalOpen(false);
-    };
-
-    // --- Backup & Restore Handlers ---
-
-    const handleExportBackup = () => {
-        exportScheduleToJson(schedule);
-    };
-
-    const handleImportBackup = async (file: File) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const content = e.target?.result as string;
-                const newSchedule = parseAndValidateSchedule(content);
-                
-                // Merge strategies? For now, we'll replace or merge intelligently?
-                // The requirement says "do not delete/modify EXISTING functionality".
-                // Importing typically replaces the state. Let's merge to be safe, overwriting only conflicts?
-                // Actually, a restore usually implies "Make my app look like this file".
-                setSchedule(newSchedule);
-                setIsBackupModalOpen(false);
-                alert("Copia de seguridad restaurada correctamente.");
-            } catch (error) {
-                alert(error instanceof Error ? error.message : "Error al importar el archivo.");
-            }
-        };
-        reader.readAsText(file);
-    };
-
-    const handleRestoreAutoBackup = () => {
-        try {
-            const autoBackup = localStorage.getItem(AUTO_BACKUP_STORAGE_KEY);
-            if (autoBackup) {
-                const newSchedule = parseAndValidateSchedule(autoBackup);
-                setSchedule(newSchedule);
-                setIsBackupModalOpen(false);
-                alert("Copia automática de hoy restaurada.");
-            } else {
-                alert("No se encontró ninguna copia automática.");
-            }
-        } catch (error) {
-            alert("Error al restaurar la copia automática.");
-        }
-    };
-
-    const hasAutoBackup = !!localStorage.getItem(AUTO_BACKUP_STORAGE_KEY);
 
     if (!isAuthenticated) {
         return <Login onLogin={handleLogin} />;
@@ -396,13 +399,22 @@ const App: React.FC = () => {
                 onNextWeek={handleNextWeek}
                 onCalendarClick={() => setIsCalendarOpen(true)}
                 onLogout={() => setIsLogoutModalOpen(true)}
+                // Firebase Props
+                user={firebaseUser}
+                isSyncing={isSyncing}
+                onLogin={handleFirebaseLogin}
+                onSignOut={handleFirebaseLogout}
+                onConfigure={() => setIsFirebaseConfigModalOpen(true)}
+                onTestConnection={handleTestConnection}
             />
+            
             <main className="flex-grow py-4 md:py-6 lg:py-8">
                 <WeekView 
                     days={weekDays} 
                     onEditDay={setEditingDay} 
                 />
             </main>
+            
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
@@ -412,8 +424,9 @@ const App: React.FC = () => {
                 isDownloadingMonth={isDownloadingMonth}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
                 isDownloadingCustomPeriod={isDownloadingCustomPeriod}
-                onOpenBackupModal={() => setIsBackupModalOpen(true)}
             />
+
+            {/* Modals */}
             {editingDay && (
                 <EditShiftModal
                     day={editingDay}
@@ -450,20 +463,14 @@ const App: React.FC = () => {
                 <ConfirmModal
                     isOpen={isLogoutModalOpen}
                     title="Cerrar Sesión"
-                    message="¿Estás seguro de que quieres cerrar la sesión?"
+                    message="¿Estás seguro de que quieres cerrar la sesión de la aplicación?"
                     onConfirm={handleLogout}
                     onCancel={() => setIsLogoutModalOpen(false)}
                     confirmText="Cerrar Sesión"
                 />
             )}
-            {isBackupModalOpen && (
-                <BackupModal
-                    onClose={() => setIsBackupModalOpen(false)}
-                    onExport={handleExportBackup}
-                    onImport={handleImportBackup}
-                    onRestoreAutoBackup={handleRestoreAutoBackup}
-                    hasAutoBackup={hasAutoBackup}
-                />
+            {isFirebaseConfigModalOpen && (
+                <FirebaseConfigModal onSave={handleConfigSave} />
             )}
         </div>
     );

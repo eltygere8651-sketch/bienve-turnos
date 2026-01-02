@@ -1,43 +1,50 @@
-export const API_KEYS_STORAGE_KEY = 'bienveAppApiKeys';
 
-export interface ApiKeys {
-    clientId: string;
-    apiKey: string;
-}
+import { FirebaseConfig } from '../types';
 
-export const saveApiKeys = (keys: ApiKeys): void => {
+export const FIREBASE_CONFIG_KEY = 'bienveAppFirebaseConfig';
+
+// Configuración Hardcoded proporcionada por el usuario
+const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
+  apiKey: "AIzaSyC6stZ-AHOh53yRTgseTpHWW6CDZOftzjA",
+  authDomain: "horarios-app-5c7f4.firebaseapp.com",
+  projectId: "horarios-app-5c7f4",
+  storageBucket: "horarios-app-5c7f4.firebasestorage.app",
+  messagingSenderId: "601838390856",
+  appId: "1:601838390856:web:7e28e13dc6b28c1ba4d27d"
+};
+
+export const saveFirebaseConfig = (config: FirebaseConfig): void => {
     try {
-        localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
+        localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
     } catch (error) {
-        console.error("Failed to save API keys to localStorage", error);
+        console.error("Failed to save Firebase config to localStorage", error);
     }
 };
 
-export const getApiKeys = (): ApiKeys | null => {
+export const getFirebaseConfig = (): FirebaseConfig | null => {
     try {
-        const storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
-        if (storedKeys) {
-            const parsed = JSON.parse(storedKeys);
-            if (parsed.clientId && parsed.apiKey) {
-                return parsed;
-            }
+        // Intentamos leer de localStorage por si el usuario quiso sobreescribir la config
+        const stored = localStorage.getItem(FIREBASE_CONFIG_KEY);
+        if (stored) {
+            return JSON.parse(stored);
         }
-        return null;
+        // Si no hay nada en localStorage, devolvemos la configuración por defecto
+        return DEFAULT_FIREBASE_CONFIG;
     } catch (error) {
-        console.error("Failed to retrieve API keys from localStorage", error);
-        return null;
+        console.error("Failed to retrieve Firebase config from localStorage", error);
+        return DEFAULT_FIREBASE_CONFIG;
     }
 };
 
-export const areKeysSet = (): boolean => {
-    const keys = getApiKeys();
-    return !!(keys && keys.clientId && keys.apiKey);
+export const isFirebaseConfigured = (): boolean => {
+    // Como tenemos una configuración por defecto, siempre devolvemos true
+    return true;
 };
 
-export const clearApiKeys = (): void => {
+export const clearFirebaseConfig = (): void => {
     try {
-        localStorage.removeItem(API_KEYS_STORAGE_KEY);
+        localStorage.removeItem(FIREBASE_CONFIG_KEY);
     } catch (error) {
-        console.error("Failed to clear API keys from localStorage", error);
+        console.error("Failed to clear Firebase config from localStorage", error);
     }
 };

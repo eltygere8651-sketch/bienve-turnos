@@ -15,6 +15,22 @@ export interface Schedule {
   [weekId: string]: Day[]; // weekId is "YYYY-WW"
 }
 
+export interface FirebaseUser {
+    uid: string;
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
+}
+
+export interface FirebaseConfig {
+    apiKey: string;
+    authDomain: string;
+    projectId: string;
+    storageBucket: string;
+    messagingSenderId: string;
+    appId: string;
+}
+
 export interface DriveUser {
     name: string;
     email: string;
@@ -22,6 +38,5 @@ export interface DriveUser {
 }
 
 export interface DriveScheduleData {
-  schedule: Schedule;
-  lastModified: string; // ISO string
+    schedule: Schedule;
 }
