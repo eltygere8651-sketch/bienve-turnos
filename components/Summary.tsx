@@ -65,7 +65,7 @@ const Summary: React.FC<SummaryProps> = ({
                         className="flex items-center space-x-2 px-4 py-2 sm:px-6 sm:py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg shadow-md transition-transform transform hover:scale-105 duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed disabled:scale-100"
                     >
                         <DownloadIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">{isAnyDownloadInProgress ? 'Generando...' : 'Reportes'}</span>
+                        <span className="hidden sm:inline">{isAnyDownloadInProgress ? 'Generando...' : 'Opciones'}</span>
                     </button>
                     {isMenuOpen && (
                         <div className="absolute bottom-full mb-2 w-full min-w-max rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 z-20 animate-fade-in right-0 origin-bottom-right">
@@ -81,7 +81,7 @@ const Summary: React.FC<SummaryProps> = ({
                                 <button
                                     onClick={() => { onDownloadMonth(); setIsMenuOpen(false); }}
                                     disabled={isDownloadingMonth}
-                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed"
+                                    className="w-full flex items-center space-x-3 text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed border-b border-gray-600"
                                 >
                                     <CalendarDownloadIcon className="w-5 h-5" />
                                     <span>{isDownloadingMonth ? 'Generando...' : 'Descargar Mes'}</span>
