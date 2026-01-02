@@ -71,6 +71,7 @@ const createShiftPart = (start: number, end: number): ShiftPart => {
     // If End < Start (e.g. 20 to 1), add 24 to End.
     // Example: 20 to 1 -> 1 < 20 -> 25. 25-20 = 5 hours.
     // Example: 20 to 00 -> 0 < 20 -> 24. 24-20 = 4 hours.
+    // Example: 20 to 2 -> 2 < 20 -> 26. 26-20 = 6 hours.
     if (endTime < start) {
         endTime += 24;
     }
@@ -84,7 +85,7 @@ const createShiftPart = (start: number, end: number): ShiftPart => {
 
 /**
  * Parses a shift string into parts.
- * Handles mixed formats robustly: "12-16:30 20-00", "12-17:30 20-1"
+ * Handles mixed formats robustly: "12-16:30 20-00", "12-17:30 20-1", "20-"
  */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
@@ -103,16 +104,24 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
 
-        // Case 1: Token is an explicit range "Start-End" (e.g. "12-16", "20-1")
+        // Case 1: Token is an explicit range "Start-End" (e.g. "12-16", "20-1", "20-")
         if (token.includes('-')) {
             const rangeParts = token.split('-');
             if (rangeParts.length === 2) {
                 const startStr = rangeParts[0];
                 const endStr = rangeParts[1];
 
-                if (startStr !== '' && endStr !== '') {
+                if (startStr !== '') {
                     const start = parseTimeToHours(startStr);
-                    const end = parseTimeToHours(endStr);
+                    
+                    // FIX: If endStr is empty (e.g. "20-"), assume it means "to closing" (24)
+                    // This fixes the "incomplete schedules" issue where hours were lost.
+                    let end = NaN;
+                    if (endStr === '') {
+                        end = 24;
+                    } else {
+                        end = parseTimeToHours(endStr);
+                    }
 
                     if (!isNaN(start) && !isNaN(end)) {
                         parts.push(createShiftPart(start, end));
