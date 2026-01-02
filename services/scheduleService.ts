@@ -1,3 +1,4 @@
+
 export interface ShiftPart {
     start: number; // hour as a float, e.g., 12.5 for 12:30
     end: number;
@@ -13,6 +14,13 @@ const parseTimeToHours = (timeStr: string): number => {
     if (typeof timeStr !== 'string') return NaN;
 
     const trimmedStr = timeStr.trim().toUpperCase();
+    
+    // CRITICAL FIX: Prevent empty strings from becoming 0 (JavaScript Number("") === 0)
+    // This prevents partial inputs like "20-" from being parsed as "20-0" (4 hours)
+    if (trimmedStr === '') {
+        return NaN;
+    }
+
     if (trimmedStr === 'C') {
         return 24;
     }
@@ -98,7 +106,7 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                     parts.push({ start: start, end: endTime });
                 }
             }
-            // Silently ignore invalid ranges like "10-12-14" or "-12".
+            // Silently ignore invalid ranges like "10-12-14" or "-12" (where one side is NaN/Empty).
         }
         // Case 2: Token is a single number; check for a subsequent number to form an implicit pair (e.g., "10" followed by "14").
         else {
