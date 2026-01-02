@@ -19,9 +19,6 @@ const parseTimeToHours = (timeStr: string): number => {
     // Handle Decimal
     const num = Number(trimmed);
     if (!isNaN(num)) {
-        // Simple heuristic: if it's 17.30, treat as 17.5 for calculation? 
-        // Or assume user uses decimal hours directly (17.5 = 17:30).
-        // Let's stick to standard decimal hours for simplicity as strictly requested.
         return num;
     }
     
@@ -31,14 +28,18 @@ const parseTimeToHours = (timeStr: string): number => {
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift) return [];
     
-    // Normalize format: "12-16 20-23"
-    const normalized = shift.replace(/\s*-\s*/g, '-').trim();
+    // Normalize format: replace dashes and trim
+    const normalized = shift.replace(/[–—]/g, '-').trim();
+    
     const parts: ShiftPart[] = [];
+    const tokens = normalized.split(/\s+/); // Split by one or more spaces
     
-    const tokens = normalized.split(' ');
-    
-    tokens.forEach(token => {
+    let i = 0;
+    while (i < tokens.length) {
+        const token = tokens[i];
+        
         if (token.includes('-')) {
+            // Case 1: Range with hyphen (e.g., "20-00", "12-16")
             const [startStr, endStr] = token.split('-');
             if (startStr && endStr) {
                 const start = parseTimeToHours(startStr);
@@ -47,14 +48,42 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                 if (!isNaN(start) && !isNaN(end)) {
                     // Handle midnight crossing (20-02 -> 20 to 26)
                     if (end < start) end += 24;
-                    // Handle 00 as 24
+                    // Handle 00 as 24 if it's the end of a shift starting later
                     if (end === 0 && start > 0) end = 24;
                     
                     parts.push({ start, end });
                 }
             }
+            i++;
+        } else {
+            // Case 2: Space separated range? (e.g., "13:30 17:30")
+            // Check if this token is a time AND the next token is a time (and not a range itself)
+            const start = parseTimeToHours(token);
+            
+            if (!isNaN(start)) {
+                // Peek at next token
+                if (i + 1 < tokens.length) {
+                    const nextToken = tokens[i+1];
+                    // Verify next token is NOT a hyphenated range (e.g. avoid merging "16" with "20-23")
+                    if (!nextToken.includes('-')) {
+                        const end = parseTimeToHours(nextToken);
+                        if (!isNaN(end)) {
+                            // We found a pair: "start" "end"
+                            let adjustedEnd = end;
+                            if (adjustedEnd < start) adjustedEnd += 24;
+                            if (adjustedEnd === 0 && start > 0) adjustedEnd = 24;
+                            
+                            parts.push({ start, end: adjustedEnd });
+                            i += 2; // Consume both tokens
+                            continue;
+                        }
+                    }
+                }
+            }
+            // If no pattern matched, move to next token
+            i++;
         }
-    });
+    }
     
     return parts;
 };

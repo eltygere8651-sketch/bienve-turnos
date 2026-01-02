@@ -244,20 +244,32 @@ const App: React.FC = () => {
 
     const handleUpdateDay = useCallback((updatedDay: Day) => {
         setSchedule(prevSchedule => {
-            // We need to use the weekId corresponding to the updated day, not necessarily the current view's weekId
+            // 1. Calculate the ID of the week this day belongs to
             const targetWeekId = getWeekId(updatedDay.date);
-            const currentWeekData = prevSchedule[targetWeekId] || getWeekDays(updatedDay.date).map(d => ({ date: d, shift: '', status: DayStatus.Work }));
             
-            const newWeekDays = currentWeekData.map(d => {
-                if (d.date.toDateString() === updatedDay.date.toDateString()) {
+            // 2. Get existing data for that week OR retrieve empty days
+            const existingWeek = prevSchedule[targetWeekId] || [];
+            
+            // 3. Generate a fresh 7-day structure for that week to ensure no gaps
+            const fullWeekDates = getWeekDays(updatedDay.date);
+            
+            const newWeekDays = fullWeekDates.map(date => {
+                // If this is the specific day being updated, use the new data
+                if (date.toDateString() === updatedDay.date.toDateString()) {
                     return updatedDay;
                 }
-                return d;
+                
+                // Otherwise, try to find this day in the existing schedule data
+                const existingDay = existingWeek.find(d => d.date.toDateString() === date.toDateString());
+                
+                // Return preserved data or a default empty day
+                return existingDay || { date, shift: '', status: DayStatus.Work };
             });
+
             return { ...prevSchedule, [targetWeekId]: newWeekDays };
         });
         setEditingDay(null);
-    }, [schedule]);
+    }, []);
     
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => {
@@ -292,19 +304,16 @@ const App: React.FC = () => {
     };
 
     // --- Report Logic ---
-    // Recalculates periods by summing weekly results to allow compensation
     const calculatePeriodData = (days: Date[]) => {
         let totalH = 0;
         let totalOvertime = 0;
         
-        // 1. Identify all weeks involved in this period
         const processedWeeks = new Set<string>();
         const relevantDays: Day[] = [];
 
         days.forEach(date => {
             const wId = getWeekId(date);
             
-            // Get day data
             const weekData = schedule[wId];
             const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
             const dayToUse = foundDay || { date, shift: '', status: DayStatus.Work };
@@ -314,13 +323,9 @@ const App: React.FC = () => {
                 totalH += calculateHoursFromShift(dayToUse.shift);
             }
 
-            // 2. Calculate Overtime PER WEEK (Full week context)
             if (!processedWeeks.has(wId)) {
                 processedWeeks.add(wId);
-                
-                // Retrieve or generate full week
                 const fullWeekDays = weekData || getWeekDays(date).map(d => ({ date: d, shift: '', status: DayStatus.Work }));
-                
                 const fullWeekHours = fullWeekDays.reduce((acc, d) => 
                     d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
                 
@@ -328,7 +333,6 @@ const App: React.FC = () => {
                 const extraDaysOff = Math.max(0, daysOff - 2);
                 const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
                 
-                // Allow negative overtime! This is the compensation logic.
                 const weekOvertime = fullWeekHours - weeklyTarget;
                 totalOvertime += weekOvertime;
             }

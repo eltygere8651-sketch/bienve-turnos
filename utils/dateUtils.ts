@@ -14,7 +14,14 @@ const getWeekNumber = (d: Date): number => {
 }
 
 export const getWeekId = (date: Date): string => {
-    const year = date.getFullYear();
+    // We must use the "Week Year" for the ID, not necessarily the calendar year.
+    // E.g. Dec 30 2024 might be Week 1 of 2025.
+    
+    // Copy date and move to nearest Thursday to determine the week-year
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const year = d.getFullYear(); // This is the correct year for the week ID
+    
     const week = getWeekNumber(date);
     return `${year}-${week.toString().padStart(2, '0')}`;
 };
