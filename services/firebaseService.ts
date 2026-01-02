@@ -43,11 +43,11 @@ export const loginWithGoogle = async () => {
         
         if (error.code === 'auth/unauthorized-domain') {
             const domain = window.location.hostname;
-            errorMessage = `Dominio no autorizado (${domain}).\n\nAcción requerida:\n1. Ve a Firebase Console.\n2. Entra en Authentication > Settings > Authorized Domains.\n3. Añade este dominio: ${domain}`;
+            errorMessage = `⚠️ DOMINIO NO AUTORIZADO (${domain})\n\nTu aplicación se está ejecutando en '${domain}', pero este dominio no está permitido en Firebase.\n\nSOLUCIÓN:\n1. Ve a console.firebase.google.com\n2. Selecciona tu proyecto\n3. Ve a Authentication > Settings > Authorized Domains\n4. Añade: ${domain}`;
         } else if (error.code === 'auth/popup-closed-by-user') {
             errorMessage = "Has cerrado la ventana de inicio de sesión antes de terminar.";
         } else if (error.code === 'auth/operation-not-allowed') {
-            errorMessage = "El inicio de sesión con Google no está habilitado en tu consola de Firebase.";
+            errorMessage = "⚠️ El inicio de sesión con Google no está habilitado.\n\nSOLUCIÓN:\n1. Ve a Firebase Console > Authentication > Sign-in method\n2. Habilita el proveedor 'Google'.";
         } else if (error.message) {
             errorMessage = error.message;
         }
@@ -83,7 +83,7 @@ export const saveScheduleToFirestore = async (userId: string, schedule: Schedule
         
     } catch (error) {
         console.error("Error saving schedule to Firestore:", error);
-        throw error;
+        // Silent fail mostly, handled by sync status UI usually
     }
 };
 
@@ -111,6 +111,11 @@ export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedul
                 }
             }
         }
+    }, (error) => {
+        console.error("Error subscribing to schedule:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("Permisos insuficientes para leer el horario. Revisa las reglas de Firestore.");
+        }
     });
 
     return unsubscribe;
@@ -123,8 +128,11 @@ export const testFirestoreConnection = async (userId: string) => {
         // Escribimos un campo simple de timestamp para verificar permisos y conexión
         await setDoc(userDocRef, { lastConnectionCheck: new Date().toISOString() }, { merge: true });
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Test connection failed:", error);
+        if (error.code === 'permission-denied') {
+             throw new Error("⚠️ PERMISOS DENEGADOS\n\nTu base de datos Firestore está bloqueada o en modo producción estricto.\n\nSOLUCIÓN:\n1. Ve a Firebase Console > Firestore Database > Reglas (Rules).\n2. Cambia las reglas para permitir acceso a usuarios autenticados:\n\nallow read, write: if request.auth != null;");
+        }
         throw error;
     }
 };
