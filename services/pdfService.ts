@@ -1,5 +1,3 @@
-
-
 import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
 import { getWeekTitle, getMonthTitle, getWeekId } from '../utils/dateUtils';
@@ -39,7 +37,7 @@ export const svgToPngDataUrl = (svgString: string, width: number, height: number
     return new Promise((resolve, reject) => {
         const img = new Image();
         // Use btoa to handle SVG content properly in the data URL
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-t' });
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
@@ -76,6 +74,23 @@ const addHeader = async (doc: jsPDF) => {
     }
 };
 
+const formatDayLine = (day: Day, dayNames: string[]): string => {
+    const dayIndex = day.date.getUTCDay() === 0 ? 6 : day.date.getUTCDay() - 1;
+    const dayName = dayNames[dayIndex];
+    const dateStr = `${String(day.date.getUTCDate()).padStart(2, '0')}/${String(day.date.getUTCMonth() + 1).padStart(2, '0')}`;
+    
+    let statusText = '';
+    if (day.status === DayStatus.Vacation) {
+        statusText = "Vacaciones";
+    } else if (day.status === DayStatus.Holiday) {
+        statusText = "Festivo";
+    } else {
+        statusText = day.shift || 'Sin turno';
+    }
+    
+    return `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
+};
+
 export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     const { weekDays, currentDate, totalHours, overtimeHours } = data;
     
@@ -99,6 +114,8 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
             doc.addPage();
             yPos = 20;
         }
+        
+        // Manual formatting for weekly view since we have the index
         let statusText = '';
         if (day.status === DayStatus.Vacation) {
             statusText = "Vacaciones";
@@ -108,6 +125,7 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
             statusText = day.shift || 'Sin turno';
         }
         doc.text(`${dayNames[index].padEnd(11)}: ${statusText}`, 20, yPos);
+        
         yPos += 6.5;
     });
 
@@ -120,9 +138,10 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155"); // Dark text color for totals
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 20, yPos);
-    yPos += 7;
-    doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 20, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 20, yPos);
+    yPos += 8;
+    // Updated label and ensures non-negative value
+    doc.text(`Total de Horas Extra: ${Math.max(0, overtimeHours).toFixed(2)}h`, 20, yPos);
     
     const weekId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
     doc.save(`horario_semanal_${weekId}.pdf`);
@@ -177,20 +196,7 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
         weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
         
         weekDays.forEach(day => {
-            const dayIndex = day.date.getUTCDay() === 0 ? 6 : day.date.getUTCDay() - 1;
-            const dayName = dayNames[dayIndex];
-            const dateStr = `${String(day.date.getUTCDate()).padStart(2, '0')}/${String(day.date.getUTCMonth() + 1).padStart(2, '0')}`;
-            
-            let statusText = '';
-            if (day.status === DayStatus.Vacation) {
-                statusText = "Vacaciones";
-            } else if (day.status === DayStatus.Holiday) {
-                statusText = "Festivo";
-            } else {
-                statusText = day.shift || 'Sin turno';
-            }
-            
-            const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
+            const line = formatDayLine(day, dayNames);
             doc.text(line, 20, yPos);
             yPos += 4;
         });
@@ -206,14 +212,15 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, doc.internal.pageSize.getWidth() - 15, yPos);
-    yPos += 8;
+    yPos += 10;
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155");
-    doc.text(`Total de Horas: ${totalHours.toFixed(2)}`, 15, yPos);
-    yPos += 7;
-    doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 15, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
+    yPos += 8;
+    // Updated label and ensures non-negative value
+    doc.text(`Total de Horas Extra: ${Math.max(0, overtimeHours).toFixed(2)}h`, 15, yPos);
 
     const monthId = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}`;
     doc.save(`horario_mensual_${monthId}.pdf`);
@@ -272,20 +279,7 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
         weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
         
         weekDays.forEach(day => {
-            const dayIndex = day.date.getUTCDay() === 0 ? 6 : day.date.getUTCDay() - 1;
-            const dayName = dayNames[dayIndex];
-            const dateStr = `${String(day.date.getUTCDate()).padStart(2, '0')}/${String(day.date.getUTCMonth() + 1).padStart(2, '0')}`;
-            
-            let statusText = '';
-            if (day.status === DayStatus.Vacation) {
-                statusText = "Vacaciones";
-            } else if (day.status === DayStatus.Holiday) {
-                statusText = "Festivo";
-            } else {
-                statusText = day.shift || 'Sin turno';
-            }
-            
-            const line = `${dayName.padEnd(11)} (${dateStr}): ${statusText}`;
+            const line = formatDayLine(day, dayNames);
             doc.text(line, 20, yPos);
             yPos += 4;
         });
@@ -301,14 +295,15 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     
     doc.setLineWidth(0.5);
     doc.line(15, yPos, doc.internal.pageSize.getWidth() - 15, yPos);
-    yPos += 8;
+    yPos += 10;
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor("#334155");
-    doc.text(`Total de Horas (en periodo): ${totalHours.toFixed(2)}`, 15, yPos);
-    yPos += 7;
-    doc.text(`Horas Extra (calculadas en periodo): ${overtimeHours.toFixed(2)}`, 15, yPos);
+    doc.text(`Total de Horas Físicas Trabajadas: ${totalHours.toFixed(2)}h`, 15, yPos);
+    yPos += 8;
+    // Updated label and ensures non-negative value
+    doc.text(`Total de Horas Extra del Periodo: ${Math.max(0, overtimeHours).toFixed(2)}h`, 15, yPos);
     
     doc.save(`horario_periodo_${periodId}.pdf`);
 };

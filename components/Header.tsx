@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, LogoutIcon } from './icons';
+import { LogoIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, LogoutIcon, CloudIcon } from './icons';
 
 interface HeaderProps {
     currentWeekTitle: string;
@@ -7,9 +7,10 @@ interface HeaderProps {
     onNextWeek: () => void;
     onCalendarClick: () => void;
     onLogout: () => void;
+    onOpenBackup: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWeek, onCalendarClick, onLogout, onOpenBackup }) => {
     
     return (
         <header className="bg-gray-800 shadow-md p-3 sm:p-4 sticky top-0 z-10">
@@ -44,7 +45,15 @@ const Header: React.FC<HeaderProps> = ({ currentWeekTitle, onPrevWeek, onNextWee
                 </div>
 
                 {/* --- Columna Derecha: Acciones --- */}
-                <div className="flex justify-end items-center">
+                <div className="flex justify-end items-center space-x-1">
+                    <button
+                        onClick={onOpenBackup}
+                        className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded-full transition-colors duration-200"
+                        aria-label="Copia de Seguridad"
+                        title="Copia de Seguridad"
+                    >
+                        <CloudIcon className="w-6 h-6" />
+                    </button>
                     <button
                         onClick={onLogout}
                         className="p-2 text-gray-400 hover:text-red-500 hover:bg-gray-700 rounded-full transition-colors duration-200"
