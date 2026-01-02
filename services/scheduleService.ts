@@ -5,34 +5,25 @@ export interface ShiftPart {
 }
 
 /**
- * Parses a time string (e.g., "12:30", "16.5", "16.30", "C") into a decimal hour value.
- * This parser is now robust against different decimal notations for time.
- * @param timeStr The time string to parse.
- * @returns The time in hours as a float, or NaN if invalid.
+ * Parses a time string (e.g., "12:30", "16.5", "16.30", "C", "1") into a decimal hour value.
  */
 const parseTimeToHours = (timeStr: string): number => {
-    if (typeof timeStr !== 'string') return NaN;
+    if (!timeStr || typeof timeStr !== 'string') return NaN;
 
     const trimmedStr = timeStr.trim().toUpperCase();
     
-    // CRITICAL FIX: Prevent empty strings from becoming 0 (JavaScript Number("") === 0)
-    // This prevents partial inputs like "20-" from being parsed as "20-0" (4 hours)
-    if (trimmedStr === '') {
-        return NaN;
-    }
+    // Prevent empty strings from being parsed as 0
+    if (trimmedStr === '') return NaN;
 
-    if (trimmedStr === 'C') {
-        return 24;
-    }
+    // Handle "Cierre"
+    if (trimmedStr === 'C') return 24;
     
-    // A valid time token for this function should not be a range (e.g., "12-16").
-    if (trimmedStr.includes('-')) {
-        return NaN;
-    }
+    // Safety check: a time token shouldn't contain a range separator here
+    if (trimmedStr.includes('-')) return NaN;
 
     const normalizedStr = trimmedStr.replace(',', '.');
 
-    // Handles HH:MM format
+    // 1. Handle HH:MM format explicitly (Standard)
     if (normalizedStr.includes(':')) {
         const parts = normalizedStr.split(':');
         if (parts.length !== 2) return NaN;
@@ -40,90 +31,88 @@ const parseTimeToHours = (timeStr: string): number => {
         const hours = Number(parts[0]);
         const minutes = Number(parts[1]);
 
-        if (!isNaN(hours) && hours >= 0 && hours <= 24 && !isNaN(minutes) && minutes >= 0 && minutes < 60) {
-            if (hours === 24 && minutes > 0) return NaN; // 24:00 is valid, but 24:01 is not
+        if (!isNaN(hours) && !isNaN(minutes) && hours >= 0 && hours <= 24 && minutes >= 0 && minutes < 60) {
+            if (hours === 24 && minutes > 0) return NaN; 
             return hours + (minutes / 60);
         }
-        return NaN; // Invalid HH:MM format
+        return NaN;
     }
     
-    // FIX: Handles decimal formats intelligently.
-    // Differentiates between "16.5" (16 and a half hours) and "16.30" (16 hours and 30 minutes).
+    // 2. Handle Decimal format (e.g. 17.5 OR 17.30 meaning 17:30)
+    // This is ambiguous in user input, but we prioritize standard decimal (17.5 = 17:30).
+    // However, users often type 16.30 to mean 16:30.
     if (normalizedStr.includes('.')) {
         const parts = normalizedStr.split('.');
         if (parts.length === 2) {
             const hours = Number(parts[0]);
-            const fractionalPart = parts[1];
+            const fractionalStr = parts[1];
             
-            // If fractional part has 2 digits (e.g., "30" in "16.30"), treat it as minutes.
-            if (fractionalPart.length === 2) {
-                const minutes = Number(fractionalPart);
-                if (!isNaN(hours) && hours >= 0 && hours < 24 && !isNaN(minutes) && minutes >= 0 && minutes < 60) {
-                    return hours + (minutes / 60);
+            // Heuristic: If user types "17.30" (2 digits), treat as minutes -> 17.5
+            if (fractionalStr.length === 2) {
+                const minutes = Number(fractionalStr);
+                if (!isNaN(hours) && !isNaN(minutes) && minutes < 60) {
+                     return hours + (minutes / 60);
                 }
             }
+            // Otherwise treat as mathematical decimal: "17.5" -> 17.5 hours
+            return Number(normalizedStr);
         }
     }
     
-    // Handles integer (e.g., 12) and single-digit decimal (e.g., 12.5) formats.
+    // 3. Handle Integer hours (e.g. "20", "1", "00")
     const num = Number(normalizedStr);
-    if (isNaN(num) || num < 0 || num > 24) { 
-        return NaN;
+    if (!isNaN(num) && num >= 0 && num <= 24) {
+        return num;
     }
-    return num;
+    
+    return NaN;
 };
 
 /**
- * Parses a shift string (e.g., "12-16 20-C" or "12 16 20 C") into a list of shift parts.
- * This implementation is robust and handles various user input styles.
+ * Parses a shift string into parts using a robust regex approach.
+ * Handles: "12-16", "12-16:30", "20-1", "20-C", "20-00", "20-23:30"
  */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
 
-    // Normalize string: remove spaces around hyphens, then split into potential time tokens.
-    const normalizedShift = shift.trim().replace(/\s*-\s*/g, '-');
-    const tokens = normalizedShift.split(/\s+/);
-
+    // Normalize spacing around hyphens: "20 - 1" -> "20-1"
+    const normalizedShift = shift.replace(/\s*-\s*/g, '-');
+    
+    // Split by spaces to get tokens like ["12-16:30", "20-1"]
+    const tokens = normalizedShift.trim().split(/\s+/);
     const parts: ShiftPart[] = [];
 
-    // Process tokens. A shift part can be an explicit range "10-14" or an implicit pair "10 14".
-    for (let i = 0; i < tokens.length; i++) {
-        const currentToken = tokens[i];
+    for (const token of tokens) {
+        // We only care about explicit ranges "Start-End"
+        if (token.includes('-')) {
+            const rangeParts = token.split('-');
+            // Must have exactly 2 parts: Start and End
+            if (rangeParts.length === 2) {
+                const startStr = rangeParts[0];
+                const endStr = rangeParts[1];
 
-        // Case 1: Token is an explicit range (e.g., "10-14", "20-C").
-        if (currentToken.includes('-')) {
-            const timeRange = currentToken.split('-');
-            if (timeRange.length === 2) {
-                const start = parseTimeToHours(timeRange[0]);
-                const end = parseTimeToHours(timeRange[1]);
+                // If end part is empty (e.g. "20-"), ignore it completely (0 hours)
+                if (startStr === '' || endStr === '') continue;
 
-                if (!isNaN(start) && !isNaN(end)) {
-                    let endTime = end;
-                    // Handle shifts crossing midnight (e.g., 22-06).
-                    if (endTime < start) {
-                        endTime += 24;
-                    }
-                    parts.push({ start: start, end: endTime });
-                }
-            }
-            // Silently ignore invalid ranges like "10-12-14" or "-12" (where one side is NaN/Empty).
-        }
-        // Case 2: Token is a single number; check for a subsequent number to form an implicit pair (e.g., "10" followed by "14").
-        else {
-            const nextToken = tokens[i + 1];
-            // The next token must not be an explicit range itself.
-            if (nextToken && !nextToken.includes('-')) {
-                const start = parseTimeToHours(currentToken);
-                const end = parseTimeToHours(nextToken);
+                const start = parseTimeToHours(startStr);
+                const end = parseTimeToHours(endStr);
 
                 if (!isNaN(start) && !isNaN(end)) {
                     let endTime = end;
-                    // Handle shifts crossing midnight.
+                    
+                    // Logic for crossing midnight:
+                    // If End < Start (e.g. 20 to 1), add 24 to End.
+                    // Special case: 20 to 00 (0) -> 0 < 20 -> 24. Diff 4.
+                    // Special case: 20 to 24 (C) -> 24 !< 20. Diff 4.
                     if (endTime < start) {
                         endTime += 24;
                     }
-                    parts.push({ start: start, end: endTime });
-                    i++; // Skip the next token as it has been processed as part of the pair.
+                    // Handle "00" explicitly as 24 if it's the end time and equals 0
+                    else if (endTime === 0 && start > 0) {
+                        endTime = 24;
+                    }
+
+                    parts.push({ start, end: endTime });
                 }
             }
         }
@@ -135,5 +124,7 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
 
 export const calculateHoursFromShift = (shift: string): number => {
     const parts = parseShiftParts(shift);
-    return parts.reduce((total, part) => total + (part.end - part.start), 0);
+    const rawTotal = parts.reduce((total, part) => total + (part.end - part.start), 0);
+    // Round to 2 decimals to avoid floating point weirdness (e.g. 14.4999999)
+    return Math.round(rawTotal * 100) / 100;
 };
