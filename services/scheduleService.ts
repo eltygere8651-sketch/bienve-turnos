@@ -39,8 +39,6 @@ const parseTimeToHours = (timeStr: string): number => {
     }
     
     // 2. Handle Decimal format (e.g. 17.5 OR 17.30 meaning 17:30)
-    // This is ambiguous in user input, but we prioritize standard decimal (17.5 = 17:30).
-    // However, users often type 16.30 to mean 16:30.
     if (normalizedStr.includes('.')) {
         const parts = normalizedStr.split('.');
         if (parts.length === 2) {
@@ -68,51 +66,75 @@ const parseTimeToHours = (timeStr: string): number => {
     return NaN;
 };
 
+// Helper to handle shift duration logic consistently
+const createShiftPart = (start: number, end: number): ShiftPart => {
+    let endTime = end;
+    
+    // Logic for crossing midnight:
+    // If End < Start (e.g. 20 to 1), add 24 to End.
+    // Special case: 20 to 00 (0) -> 0 < 20 -> 24. Diff 4.
+    if (endTime < start) {
+        endTime += 24;
+    }
+    // Handle "00" explicitly as 24 if it's the end time (e.g. 19:30 to 00)
+    // Note: 19.5 to 0. 0 < 19.5 is true, so it becomes 24.
+    // But if start is 0 (00:00 to 08:00), 8 !< 0, stays 8. Correct.
+    
+    return { start, end: endTime };
+};
+
 /**
- * Parses a shift string into parts using a robust regex approach.
- * Handles: "12-16", "12-16:30", "20-1", "20-C", "20-00", "20-23:30"
+ * Parses a shift string into parts.
+ * Handles mixed formats: "12-16", "13:30 17:30", "20-C", "19:30 00:30"
  */
 export const parseShiftParts = (shift: string): ShiftPart[] => {
     if (!shift || typeof shift !== 'string') return [];
 
     // Normalize spacing around hyphens: "20 - 1" -> "20-1"
-    const normalizedShift = shift.replace(/\s*-\s*/g, '-');
+    const normalizedShift = shift.replace(/\s*-\s*/g, '-').trim();
+    if (!normalizedShift) return [];
     
-    // Split by spaces to get tokens like ["12-16:30", "20-1"]
-    const tokens = normalizedShift.trim().split(/\s+/);
+    // Split by spaces to get tokens
+    const tokens = normalizedShift.split(/\s+/);
     const parts: ShiftPart[] = [];
 
-    for (const token of tokens) {
-        // We only care about explicit ranges "Start-End"
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+
+        // Case 1: Token is an explicit range "Start-End" (e.g. "12-16")
         if (token.includes('-')) {
             const rangeParts = token.split('-');
-            // Must have exactly 2 parts: Start and End
             if (rangeParts.length === 2) {
                 const startStr = rangeParts[0];
                 const endStr = rangeParts[1];
 
-                // If end part is empty (e.g. "20-"), ignore it completely (0 hours)
-                if (startStr === '' || endStr === '') continue;
+                // FIX: Strict check against empty strings to avoid parsing "20-" as valid
+                if (startStr !== '' && endStr !== '') {
+                    const start = parseTimeToHours(startStr);
+                    const end = parseTimeToHours(endStr);
 
-                const start = parseTimeToHours(startStr);
-                const end = parseTimeToHours(endStr);
-
-                if (!isNaN(start) && !isNaN(end)) {
-                    let endTime = end;
-                    
-                    // Logic for crossing midnight:
-                    // If End < Start (e.g. 20 to 1), add 24 to End.
-                    // Special case: 20 to 00 (0) -> 0 < 20 -> 24. Diff 4.
-                    // Special case: 20 to 24 (C) -> 24 !< 20. Diff 4.
-                    if (endTime < start) {
-                        endTime += 24;
+                    if (!isNaN(start) && !isNaN(end)) {
+                        parts.push(createShiftPart(start, end));
                     }
-                    // Handle "00" explicitly as 24 if it's the end time and equals 0
-                    else if (endTime === 0 && start > 0) {
-                        endTime = 24;
-                    }
+                }
+            }
+        }
+        // Case 2: Token is likely a Start time of a space-separated pair (e.g. "13:30" followed by "17:30")
+        else {
+            // Check if there is a next token available
+            if (i + 1 < tokens.length) {
+                const nextToken = tokens[i + 1];
+                
+                // Ensure the next token isn't a range itself (e.g. "12 16-20" -> 12 is loose)
+                if (!nextToken.includes('-')) {
+                    const start = parseTimeToHours(token);
+                    const end = parseTimeToHours(nextToken);
 
-                    parts.push({ start, end: endTime });
+                    if (!isNaN(start) && !isNaN(end)) {
+                        parts.push(createShiftPart(start, end));
+                        // Skip the next token since we consumed it as the 'end' time
+                        i++; 
+                    }
                 }
             }
         }
