@@ -1,7 +1,7 @@
 
 import jsPDF from 'jspdf';
 import { Day, DayStatus } from '../types';
-import { getWeekTitle, getMonthTitle, getWeekId } from '../utils/dateUtils';
+import { getWeekTitle, getMonthTitle, getWeekId, formatDayDate } from '../utils/dateUtils';
 import { LOGO_SVG_STRING_PDF } from '../constants';
 import { formatShift } from './scheduleService';
 
@@ -76,6 +76,36 @@ const addHeader = async (doc: jsPDF) => {
     }
 };
 
+const saveOrSharePdf = async (doc: jsPDF, filename: string, shareText: string = 'Aquí tienes mi horario en formato PDF.') => {
+    try {
+        const blob = doc.output('blob');
+        const file = new File([blob], filename, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Horario',
+                    text: shareText,
+                });
+                return; // Shared successfully
+            } catch (error: any) {
+                if (error.name === 'AbortError') {
+                    console.log('Share was aborted by the user.');
+                    return;
+                }
+                console.error('Error sharing PDF:', error);
+                // Fallback to download
+            }
+        }
+        
+        doc.save(filename);
+    } catch (error) {
+        console.error('Error in saveOrSharePdf:', error);
+        doc.save(filename);
+    }
+};
+
 export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     const { weekDays, currentDate, totalHours, overtimeHours } = data;
     
@@ -126,7 +156,8 @@ export const downloadScheduleAsPdf = async (data: WeekPdfData) => {
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 20, yPos);
     
     const weekId = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    doc.save(`horario_semanal_${weekId}.pdf`);
+    const shareText = `Horario Semanal (${getWeekTitle(currentDate)}): ${totalHours.toFixed(2)}h totales, ${overtimeHours.toFixed(2)}h extra.`;
+    await saveOrSharePdf(doc, `horario_semanal_${weekId}.pdf`, shareText);
 };
 
 export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
@@ -218,7 +249,8 @@ export const downloadMonthScheduleAsPdf = async (data: MonthPdfData) => {
     doc.text(`Horas Extraordinarias: ${overtimeHours.toFixed(2)}`, 15, yPos);
 
     const monthId = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}`;
-    doc.save(`horario_mensual_${monthId}.pdf`);
+    const shareText = `Horario Mensual (${getMonthTitle(currentDate)}): ${totalHours.toFixed(2)}h totales, ${overtimeHours.toFixed(2)}h extra.`;
+    await saveOrSharePdf(doc, `horario_mensual_${monthId}.pdf`, shareText);
 };
 
 export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
@@ -313,5 +345,6 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     yPos += 7;
     doc.text(`Horas Extra (calculadas en periodo): ${overtimeHours.toFixed(2)}`, 15, yPos);
     
-    doc.save(`horario_periodo_${periodId}.pdf`);
+    const shareText = `Horario del ${formatDayDate(startDate)} al ${formatDayDate(endDate)}: ${totalHours.toFixed(2)}h totales, ${overtimeHours.toFixed(2)}h extra.`;
+    await saveOrSharePdf(doc, `horario_periodo_${periodId}.pdf`, shareText);
 };

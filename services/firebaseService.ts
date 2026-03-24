@@ -1,7 +1,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, Auth, User, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { FirebaseConfig, Schedule } from '../types';
 
 let app: FirebaseApp | null = null;
@@ -84,6 +84,32 @@ export const saveScheduleToFirestore = async (userId: string, schedule: Schedule
     } catch (error) {
         console.error("Error saving schedule to Firestore:", error);
         throw error; // Lanzamos el error para que la UI pueda avisar al usuario
+    }
+};
+
+export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedule | null> => {
+    if (!db) return null;
+    try {
+        const userDocRef = doc(db, "users", userId);
+        const docSnapshot = await getDoc(userDocRef);
+        if (docSnapshot.exists()) {
+            const data = docSnapshot.data();
+            if (data && data.schedule) {
+                const parsedSchedule = JSON.parse(data.schedule);
+                const rehydratedSchedule: Schedule = {};
+                for (const weekId in parsedSchedule) {
+                    rehydratedSchedule[weekId] = parsedSchedule[weekId].map((day: any) => ({
+                        ...day,
+                        date: new Date(day.date)
+                    }));
+                }
+                return rehydratedSchedule;
+            }
+        }
+        return null;
+    } catch (error: any) {
+        console.error("Error fetching schedule from Firestore:", error);
+        return null;
     }
 };
 

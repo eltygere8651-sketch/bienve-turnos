@@ -17,6 +17,7 @@ interface HeaderProps {
     onSignOut: () => void;
     onConfigure: () => void;
     onTestConnection: () => void;
+    onForceDownload: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -30,7 +31,8 @@ const Header: React.FC<HeaderProps> = ({
     onLogin,
     onSignOut,
     onConfigure,
-    onTestConnection
+    onTestConnection,
+    onForceDownload
 }) => {
     
     return (
@@ -74,6 +76,7 @@ const Header: React.FC<HeaderProps> = ({
                         onLogout={onSignOut}
                         onConfigure={onConfigure}
                         onTestConnection={onTestConnection}
+                        onForceDownload={onForceDownload}
                     />
                     <div className="h-6 w-px bg-gray-700 mx-1"></div>
                     <button

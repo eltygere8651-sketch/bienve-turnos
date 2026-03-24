@@ -1,4 +1,4 @@
-import { Schedule, DriveUser, DriveScheduleData } from '../types';
+import { DriveUser, DriveScheduleData } from '../types';
 
 // Add type declarations for Google Sign-In and Google Drive APIs.
 // These are loaded globally from script tags, so we need to inform TypeScript about their existence and shape.

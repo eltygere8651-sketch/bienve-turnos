@@ -1,3 +1,4 @@
+// @ts-ignore
 import { GoogleGenAI } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;

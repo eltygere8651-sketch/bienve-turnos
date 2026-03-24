@@ -10,9 +10,10 @@ interface UserAuthProps {
     onLogout: () => void;
     onConfigure: () => void;
     onTestConnection: () => void;
+    onForceDownload: () => void;
 }
 
-const UserAuth: React.FC<UserAuthProps> = ({ user, isSyncing, onLogin, onLogout, onConfigure, onTestConnection }) => {
+const UserAuth: React.FC<UserAuthProps> = ({ user, isSyncing, onLogin, onLogout, onConfigure, onTestConnection, onForceDownload }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +74,13 @@ const UserAuth: React.FC<UserAuthProps> = ({ user, isSyncing, onLogin, onLogout,
                             <p className="font-semibold truncate">{user.displayName}</p>
                             <p className="text-xs truncate text-gray-400">{user.email}</p>
                         </div>
+                        <a
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); onForceDownload(); setIsMenuOpen(false); }}
+                            className="block px-4 py-2 text-sm text-blue-400 hover:bg-gray-600"
+                        >
+                            Forzar Descarga de Nube
+                        </a>
                         <a
                             href="#"
                             onClick={(e) => { e.preventDefault(); onConfigure(); setIsMenuOpen(false); }}

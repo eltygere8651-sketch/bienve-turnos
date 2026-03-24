@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus, FirebaseUser, FirebaseConfig } from './types';
-import { getWeekId, getWeekDays, getWeekTitle, getDaysInMonth } from './utils/dateUtils';
+import { getWeekId, getWeekDays, getWeekTitle } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import { downloadScheduleAsPdf, downloadMonthScheduleAsPdf, downloadCustomPeriodPdf } from './services/pdfService';
+import { downloadCustomPeriodPdf } from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -17,7 +17,7 @@ import ConfirmModal from './components/ConfirmModal';
 import FirebaseConfigModal from './components/FirebaseConfigModal';
 
 import { saveFirebaseConfig, getFirebaseConfig, isFirebaseConfigured } from './services/apiKeyService';
-import { initFirebase, loginWithGoogle, logoutUser, subscribeToAuthChanges, subscribeToSchedule, saveScheduleToFirestore, testFirestoreConnection } from './services/firebaseService';
+import { initFirebase, loginWithGoogle, logoutUser, subscribeToAuthChanges, subscribeToSchedule, saveScheduleToFirestore, testFirestoreConnection, fetchScheduleFromFirestore } from './services/firebaseService';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
@@ -54,14 +54,11 @@ const App: React.FC = () => {
     const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
     const [isFirebaseConfigModalOpen, setIsFirebaseConfigModalOpen] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    const isRemoteUpdate = useRef(false);
 
     // --- UI State ---
     const [editingDay, setEditingDay] = useState<Day | null>(null);
     const { templates, addTemplate, deleteTemplate } = useShiftTemplates();
     const [isManagingTemplates, setIsManagingTemplates] = useState(false);
-    const [isDownloading, setIsDownloading] = useState(false);
-    const [isDownloadingMonth, setIsDownloadingMonth] = useState(false);
     const [isDownloadingCustomPeriod, setIsDownloadingCustomPeriod] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCustomPeriodModalOpen, setIsCustomPeriodModalOpen] = useState(false);
@@ -106,44 +103,6 @@ const App: React.FC = () => {
         }
     }, [isAuthenticated]);
 
-    useEffect(() => {
-        if (firebaseUser?.uid) {
-            setIsSyncing(true);
-            const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
-                let hasLocalChangesMerged = false;
-                
-                setSchedule(prevSchedule => {
-                    const merged = { ...remoteSchedule };
-                    
-                    for (const weekId in prevSchedule) {
-                        const localHasShifts = prevSchedule[weekId].some(d => d.shift.trim() !== '');
-                        const remoteHasShifts = merged[weekId] && merged[weekId].some(d => d.shift.trim() !== '');
-                        
-                        // Si hay turnos locales pero no remotos para esta semana, conservamos los locales
-                        if (localHasShifts && !remoteHasShifts) {
-                            merged[weekId] = prevSchedule[weekId];
-                            hasLocalChangesMerged = true;
-                        }
-                    }
-                    
-                    return merged;
-                });
-                
-                setIsSyncing(false);
-                
-                if (hasLocalChangesMerged) {
-                    // Si hubo cambios locales que se fusionaron, NO marcamos como actualización remota
-                    // para que el useEffect de guardado se dispare y actualice Firestore.
-                    isRemoteUpdate.current = false;
-                } else {
-                    isRemoteUpdate.current = true;
-                    setTimeout(() => { isRemoteUpdate.current = false; }, 100);
-                }
-            });
-            return () => unsubscribeSchedule();
-        }
-    }, [firebaseUser?.uid]);
-
     const debouncedSaveToFirestore = useDebouncedCallback(async (currentSchedule: Schedule, uid: string) => {
         if (!uid) return;
         setIsSyncing(true);
@@ -158,10 +117,15 @@ const App: React.FC = () => {
     }, 1000);
 
     useEffect(() => {
-        if (firebaseUser?.uid && !isRemoteUpdate.current) {
-            debouncedSaveToFirestore(schedule, firebaseUser.uid);
+        if (firebaseUser?.uid) {
+            setIsSyncing(true);
+            const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
+                setSchedule(remoteSchedule);
+                setIsSyncing(false);
+            });
+            return () => unsubscribeSchedule();
         }
-    }, [schedule, firebaseUser, debouncedSaveToFirestore]);
+    }, [firebaseUser?.uid]);
 
     // --- Handlers ---
 
@@ -197,6 +161,26 @@ const App: React.FC = () => {
         }
     };
 
+    const handleForceDownload = async () => {
+        if (!firebaseUser?.uid) return;
+        if (!confirm("¿Estás seguro de que quieres forzar la descarga? Esto sobrescribirá tus turnos locales con los de la nube.")) return;
+        
+        setIsSyncing(true);
+        try {
+            const remoteSchedule = await fetchScheduleFromFirestore(firebaseUser.uid);
+            if (remoteSchedule) {
+                setSchedule(remoteSchedule);
+                alert("✅ Turnos descargados correctamente desde la nube.");
+            } else {
+                alert("ℹ️ No se encontraron turnos en la nube para tu usuario.");
+            }
+        } catch (error: any) {
+            alert(`❌ Error al descargar: ${error.message || 'No se pudo contactar con Firestore.'}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     const handleConfigSave = (config: FirebaseConfig) => {
         saveFirebaseConfig(config);
         setIsFirebaseConfigModalOpen(false);
@@ -206,48 +190,6 @@ const App: React.FC = () => {
         } catch (e) {
             alert("Error inicializando Firebase con esa configuración.");
         }
-    };
-
-    // --- Generate Temp Data ---
-    const handleGenerateTempData = () => {
-        const year = new Date().getFullYear();
-        const start = new Date(year, 11, 1); // 1 de Diciembre
-        const end = new Date(year, 11, 28); 
-        
-        setSchedule(prevSchedule => {
-            const newSchedule = { ...prevSchedule };
-            let loopDate = new Date(start);
-
-            while (loopDate <= end) {
-                const wId = getWeekId(loopDate);
-                
-                if (!newSchedule[wId]) {
-                    const weekDaysForId = getWeekDays(loopDate);
-                    newSchedule[wId] = weekDaysForId.map(d => ({
-                        date: d,
-                        shift: '',
-                        status: DayStatus.Work
-                    }));
-                }
-
-                const dayStr = loopDate.toDateString();
-                const dayIndex = newSchedule[wId].findIndex(d => d.date.toDateString() === dayStr);
-
-                if (dayIndex !== -1) {
-                    newSchedule[wId][dayIndex] = {
-                        ...newSchedule[wId][dayIndex],
-                        shift: '10-14 17-21',
-                        status: DayStatus.Work
-                    };
-                }
-
-                loopDate.setDate(loopDate.getDate() + 1);
-            }
-            return newSchedule;
-        });
-
-        setCurrentDate(start);
-        alert("Generados turnos del 1 al 28 de Diciembre.");
     };
 
     // --- Date & Schedule Logic ---
@@ -292,10 +234,16 @@ const App: React.FC = () => {
                 return existingDay || { date, shift: '', status: DayStatus.Work };
             });
 
-            return { ...prevSchedule, [targetWeekId]: newWeekDays };
+            const newSchedule = { ...prevSchedule, [targetWeekId]: newWeekDays };
+            
+            if (firebaseUser?.uid) {
+                debouncedSaveToFirestore(newSchedule, firebaseUser.uid);
+            }
+            
+            return newSchedule;
         });
         setEditingDay(null);
-    }, []);
+    }, [firebaseUser, debouncedSaveToFirestore]);
     
     const { totalHours, overtimeHours } = useMemo(() => {
         const workHours = weekDays.reduce((acc, day) => {
@@ -332,14 +280,11 @@ const App: React.FC = () => {
     // --- Report Logic ---
     const calculatePeriodData = (days: Date[]) => {
         let totalH = 0;
-        let totalOvertime = 0;
-        
-        const processedWeeks = new Set<string>();
+        let daysOff = 0;
         const relevantDays: Day[] = [];
 
         days.forEach(date => {
             const wId = getWeekId(date);
-            
             const weekData = schedule[wId];
             const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
             const dayToUse = foundDay || { date, shift: '', status: DayStatus.Work };
@@ -347,22 +292,16 @@ const App: React.FC = () => {
 
             if (dayToUse.status === DayStatus.Work) {
                 totalH += calculateHoursFromShift(dayToUse.shift);
-            }
-
-            if (!processedWeeks.has(wId)) {
-                processedWeeks.add(wId);
-                const fullWeekDays = weekData || getWeekDays(date).map(d => ({ date: d, shift: '', status: DayStatus.Work }));
-                const fullWeekHours = fullWeekDays.reduce((acc, d) => 
-                    d.status === DayStatus.Work ? acc + calculateHoursFromShift(d.shift) : acc, 0);
-                
-                const daysOff = fullWeekDays.filter(d => d.status === DayStatus.Holiday || d.status === DayStatus.Vacation).length;
-                const extraDaysOff = Math.max(0, daysOff - 2);
-                const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
-                
-                const weekOvertime = fullWeekHours - weeklyTarget;
-                totalOvertime += weekOvertime;
+            } else if (dayToUse.status === DayStatus.Holiday || dayToUse.status === DayStatus.Vacation) {
+                daysOff++;
             }
         });
+
+        const totalWeeks = days.length / 7;
+        const expectedDaysOff = totalWeeks * 2;
+        const extraDaysOff = Math.max(0, daysOff - expectedDaysOff);
+        const targetHours = Math.max(0, (totalWeeks * 40) - (extraDaysOff * 8));
+        const totalOvertime = totalH - targetHours;
 
         return {
             periodDays: relevantDays.filter(d => d.shift || d.status !== DayStatus.Work),
@@ -371,30 +310,6 @@ const App: React.FC = () => {
         };
     };
 
-    const handleDownload = async () => {
-        setIsDownloading(true);
-        try { await downloadScheduleAsPdf({ weekDays, currentDate, totalHours, overtimeHours }); } 
-        catch (e) { console.error(e); alert("Error al generar PDF."); } 
-        finally { setIsDownloading(false); }
-    };
-    
-    const handleDownloadMonth = async () => {
-        setIsDownloadingMonth(true);
-        try {
-            const daysInMonth = getDaysInMonth(currentDate);
-            const { periodDays, totalHours, overtimeHours } = calculatePeriodData(daysInMonth);
-            
-            await downloadMonthScheduleAsPdf({ 
-                monthDays: periodDays, 
-                currentDate, 
-                totalHours, 
-                overtimeHours 
-            });
-
-        } catch (e) { console.error(e); alert("Error PDF Mensual"); } 
-        finally { setIsDownloadingMonth(false); }
-    };
-    
     const handleDownloadCustomPeriod = async (startDate: Date, endDate: Date) => {
         setIsDownloadingCustomPeriod(true);
         setIsCustomPeriodModalOpen(false);
@@ -444,6 +359,7 @@ const App: React.FC = () => {
                 onSignOut={handleFirebaseLogout}
                 onConfigure={() => setIsFirebaseConfigModalOpen(true)}
                 onTestConnection={handleTestConnection}
+                onForceDownload={handleForceDownload}
             />
             
             <main className="flex-grow py-4 md:py-6 lg:py-8">
@@ -456,13 +372,8 @@ const App: React.FC = () => {
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
-                onDownload={handleDownload}
-                isDownloading={isDownloading}
-                onDownloadMonth={handleDownloadMonth}
-                isDownloadingMonth={isDownloadingMonth}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
                 isDownloadingCustomPeriod={isDownloadingCustomPeriod}
-                onGenerateTempData={handleGenerateTempData}
             />
 
             {editingDay && (
