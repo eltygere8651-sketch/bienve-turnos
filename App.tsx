@@ -110,10 +110,35 @@ const App: React.FC = () => {
         if (firebaseUser?.uid) {
             setIsSyncing(true);
             const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
-                isRemoteUpdate.current = true;
-                setSchedule(remoteSchedule);
+                let hasLocalChangesMerged = false;
+                
+                setSchedule(prevSchedule => {
+                    const merged = { ...remoteSchedule };
+                    
+                    for (const weekId in prevSchedule) {
+                        const localHasShifts = prevSchedule[weekId].some(d => d.shift.trim() !== '');
+                        const remoteHasShifts = merged[weekId] && merged[weekId].some(d => d.shift.trim() !== '');
+                        
+                        // Si hay turnos locales pero no remotos para esta semana, conservamos los locales
+                        if (localHasShifts && !remoteHasShifts) {
+                            merged[weekId] = prevSchedule[weekId];
+                            hasLocalChangesMerged = true;
+                        }
+                    }
+                    
+                    return merged;
+                });
+                
                 setIsSyncing(false);
-                setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+                
+                if (hasLocalChangesMerged) {
+                    // Si hubo cambios locales que se fusionaron, NO marcamos como actualización remota
+                    // para que el useEffect de guardado se dispare y actualice Firestore.
+                    isRemoteUpdate.current = false;
+                } else {
+                    isRemoteUpdate.current = true;
+                    setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+                }
             });
             return () => unsubscribeSchedule();
         }
@@ -124,8 +149,9 @@ const App: React.FC = () => {
         setIsSyncing(true);
         try {
             await saveScheduleToFirestore(uid, currentSchedule);
-        } catch (e) {
+        } catch (e: any) {
             console.error("Save to firestore failed", e);
+            alert(`⚠️ Error al sincronizar con la nube: ${e.message || 'Revisa tus permisos de Firebase.'}\nTus datos solo se han guardado localmente en este dispositivo.`);
         } finally {
             setIsSyncing(false);
         }

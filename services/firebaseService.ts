@@ -73,7 +73,7 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
 // Firestore Logic
 
 export const saveScheduleToFirestore = async (userId: string, schedule: Schedule) => {
-    if (!db) return;
+    if (!db) throw new Error("Base de datos no inicializada");
     try {
         // Guardamos el horario como string JSON. Firestore maneja la sincronización.
         await setDoc(doc(db, "users", userId), {
@@ -83,7 +83,7 @@ export const saveScheduleToFirestore = async (userId: string, schedule: Schedule
         
     } catch (error) {
         console.error("Error saving schedule to Firestore:", error);
-        // Silent fail mostly, handled by sync status UI usually
+        throw error; // Lanzamos el error para que la UI pueda avisar al usuario
     }
 };
 
