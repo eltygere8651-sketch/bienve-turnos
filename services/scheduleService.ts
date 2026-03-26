@@ -46,16 +46,31 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                 let end = parseTimeToHours(endStr);
                 
                 if (!isNaN(start) && !isNaN(end)) {
-                    // Handle midnight crossing (20-02 -> 20 to 26)
                     if (end < start) end += 24;
-                    // Handle 00 as 24 if it's the end of a shift starting later
                     if (end === 0 && start > 0) end = 24;
-                    
                     parts.push({ start, end });
                 }
             }
+            i++;
+        } else {
+            // Case 2: Space separated times (e.g., "19:30 23:30")
+            const startStr = token;
+            const nextToken = tokens[i + 1];
+            
+            if (nextToken && !nextToken.includes('-')) {
+                const start = parseTimeToHours(startStr);
+                let end = parseTimeToHours(nextToken);
+                
+                if (!isNaN(start) && !isNaN(end)) {
+                    if (end < start) end += 24;
+                    if (end === 0 && start > 0) end = 24;
+                    parts.push({ start, end });
+                    i += 2; // Consume both tokens
+                    continue;
+                }
+            }
+            i++;
         }
-        i++;
     }
     
     return parts;
