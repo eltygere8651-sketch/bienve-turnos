@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - schedule: string (required, < 1MB) - JSON string of weekly schedule
+    //   - lastUpdated: timestamp (optional) - Last sync time
+    //   - lastConnectionCheck: string (optional) - ISO date string
+    //   - role: string (optional, enum: ['admin', 'user']) - User role
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "eltygere8651@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['schedule', 'lastUpdated', 'lastConnectionCheck', 'role']) &&
+             (data.schedule is string && data.schedule.size() < 1000000) &&
+             (!('lastUpdated' in data) || data.lastUpdated is timestamp) &&
+             (!('lastConnectionCheck' in data) || data.lastConnectionCheck is string) &&
+             (!('role' in data) || data.role in ['admin', 'user']);
+    }
+
+    match /users/{userId} {
+      // Users can only read their own data unless they are an admin
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can only create/update their own data
+      // They cannot set their own role to 'admin' unless they are already an admin
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
+      
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
+      
+      // Users cannot delete their own profile, only admins can
+      allow delete: if isAdmin();
+    }
+  }
+}

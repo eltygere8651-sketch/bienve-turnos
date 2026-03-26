@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and schedule data",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string",
+          "description": "JSON string of the user's weekly schedule"
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time the schedule was updated"
+        },
+        "lastConnectionCheck": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time the connection was tested"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "User role for access control"
+        }
+      },
+      "required": ["schedule"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User documents containing schedule data"
+    }
+  }
+}

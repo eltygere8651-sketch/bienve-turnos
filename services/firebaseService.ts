@@ -1,19 +1,71 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, Auth, User, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, Firestore, enableIndexedDbPersistence, getDocFromServer } from 'firebase/firestore';
 import { FirebaseConfig, Schedule } from '../types';
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string | null;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
+      providerInfo: auth?.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export const initFirebase = (config: FirebaseConfig) => {
     if (app) return; // Already initialized
     try {
         app = initializeApp(config);
         auth = getAuth(app);
-        db = getFirestore(app);
+        // Use firestoreDatabaseId if provided
+        db = config.firestoreDatabaseId ? getFirestore(app, config.firestoreDatabaseId) : getFirestore(app);
         
         // Habilitar persistencia offline para móviles
         enableIndexedDbPersistence(db).catch((err) => {
@@ -74,6 +126,7 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
 
 export const saveScheduleToFirestore = async (userId: string, schedule: Schedule) => {
     if (!db) throw new Error("Base de datos no inicializada");
+    const path = `users/${userId}`;
     try {
         // Guardamos el horario como string JSON. Firestore maneja la sincronización.
         await setDoc(doc(db, "users", userId), {
@@ -82,13 +135,13 @@ export const saveScheduleToFirestore = async (userId: string, schedule: Schedule
         }, { merge: true });
         
     } catch (error) {
-        console.error("Error saving schedule to Firestore:", error);
-        throw error; // Lanzamos el error para que la UI pueda avisar al usuario
+        handleFirestoreError(error, OperationType.WRITE, path);
     }
 };
 
 export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedule | null> => {
     if (!db) return null;
+    const path = `users/${userId}`;
     try {
         const userDocRef = doc(db, "users", userId);
         const docSnapshot = await getDoc(userDocRef);
@@ -108,7 +161,7 @@ export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedu
         }
         return null;
     } catch (error: any) {
-        console.error("Error fetching schedule from Firestore:", error);
+        handleFirestoreError(error, OperationType.GET, path);
         return null;
     }
 };
@@ -116,6 +169,7 @@ export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedu
 export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedule) => void) => {
     if (!db) return () => {};
     
+    const path = `users/${userId}`;
     const userDocRef = doc(db, "users", userId);
     
     const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
@@ -138,10 +192,7 @@ export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedul
             }
         }
     }, (error) => {
-        console.error("Error subscribing to schedule:", error);
-        if (error.code === 'permission-denied') {
-            console.warn("Permisos insuficientes para leer el horario. Revisa las reglas de Firestore.");
-        }
+        handleFirestoreError(error, OperationType.GET, path);
     });
 
     return unsubscribe;
@@ -149,16 +200,24 @@ export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedul
 
 export const testFirestoreConnection = async (userId: string) => {
     if (!db) throw new Error("Firebase no inicializado");
+    const path = `users/${userId}`;
     try {
+        // Test connection by fetching from server
+        try {
+            await getDocFromServer(doc(db, 'test', 'connection'));
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('the client is offline')) {
+                console.error("Please check your Firebase configuration.");
+                throw new Error("⚠️ ERROR DE CONFIGURACIÓN\n\nEl cliente está offline. Revisa tu configuración de Firebase.");
+            }
+            // Skip logging for other errors, as this is simply a connection test.
+        }
+
         const userDocRef = doc(db, "users", userId);
         // Escribimos un campo simple de timestamp para verificar permisos y conexión
         await setDoc(userDocRef, { lastConnectionCheck: new Date().toISOString() }, { merge: true });
         return true;
     } catch (error: any) {
-        console.error("Test connection failed:", error);
-        if (error.code === 'permission-denied') {
-             throw new Error("⚠️ PERMISOS DENEGADOS\n\nTu base de datos Firestore está bloqueada o en modo producción estricto.\n\nSOLUCIÓN:\n1. Ve a Firebase Console > Firestore Database > Reglas (Rules).\n2. Cambia las reglas para permitir acceso a usuarios autenticados:\n\nallow read, write: if request.auth != null;");
-        }
-        throw error;
+        handleFirestoreError(error, OperationType.WRITE, path);
     }
 };
