@@ -369,39 +369,6 @@ const App: React.FC = () => {
         return { totalHours: workHours, overtimeHours: overtime };
     }, [weekDays]);
 
-    const { monthlyTotalHours, monthlyOvertimeHours } = useMemo(() => {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        let totalH = 0;
-        let daysOff = 0;
-        
-        for (let i = 1; i <= daysInMonth; i++) {
-            const date = new Date(year, month, i);
-            const wId = getWeekId(date);
-            const weekData = schedule[wId];
-            const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
-            
-            if (foundDay) {
-                if (foundDay.status === DayStatus.Work) {
-                    totalH += calculateHoursFromShift(foundDay.shift);
-                } else if (foundDay.status === DayStatus.Holiday || foundDay.status === DayStatus.Vacation) {
-                    daysOff++;
-                }
-            }
-        }
-        
-        // Monthly target: 40h per 7 days.
-        const totalWeeks = daysInMonth / 7;
-        const expectedDaysOff = Math.floor(totalWeeks * 2);
-        const extraDaysOff = Math.max(0, daysOff - expectedDaysOff);
-        const targetHours = Math.max(0, (totalWeeks * 40) - (extraDaysOff * 8));
-        const totalOvertime = totalH - targetHours;
-        
-        return { monthlyTotalHours: totalH, monthlyOvertimeHours: totalOvertime };
-    }, [currentDate, schedule]);
-
     const handlePrevWeek = () => {
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() - 7);
@@ -499,7 +466,6 @@ const App: React.FC = () => {
                 currentWeekTitle={getWeekTitle(currentDate)}
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
-                onGoToToday={() => setCurrentDate(new Date())}
                 onCalendarClick={() => setIsCalendarOpen(true)}
                 onLogout={() => setIsLogoutModalOpen(true)}
                 user={firebaseUser}
@@ -521,8 +487,6 @@ const App: React.FC = () => {
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
-                monthlyTotalHours={monthlyTotalHours}
-                monthlyOvertimeHours={monthlyOvertimeHours}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
                 isDownloadingCustomPeriod={isDownloadingCustomPeriod}
             />
