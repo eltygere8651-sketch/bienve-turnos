@@ -38,12 +38,51 @@ const App: React.FC = () => {
             const savedSchedule = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             if (savedSchedule) {
                 const parsed = JSON.parse(savedSchedule);
+                
+                // Re-hydrate dates first
                 Object.keys(parsed).forEach(weekId => {
                     parsed[weekId] = parsed[weekId].map((day: any) => ({
                         ...day,
                         date: new Date(day.date),
                     }));
                 });
+
+                // --- MIGRATION: Sunday-start to Monday-start ---
+                // If we find keys that are Sundays, we redistribute them to Monday-based keys
+                const migrated: Schedule = {};
+                let needsMigration = false;
+
+                Object.keys(parsed).forEach(key => {
+                    const date = new Date(key);
+                    if (date.getDay() === 0) { // It's a Sunday (old logic)
+                        needsMigration = true;
+                        const days: Day[] = parsed[key];
+                        days.forEach(day => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            // Avoid duplicates if the day is already there
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    } else {
+                        // It's already a Monday or something else, keep it
+                        if (!migrated[key]) migrated[key] = [];
+                        parsed[key].forEach((day: Day) => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    }
+                });
+
+                if (needsMigration) {
+                    console.log("Migrated schedule from Sunday-start to Monday-start");
+                    return migrated;
+                }
+
                 return parsed;
             }
         } catch (error) {
@@ -122,8 +161,42 @@ const App: React.FC = () => {
         if (firebaseUser?.uid) {
             setIsSyncing(true);
             const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
-                setSchedule(remoteSchedule);
+                // --- MIGRATION: Sunday-start to Monday-start for Remote Data ---
+                const migrated: Schedule = {};
+                let needsMigration = false;
+
+                Object.keys(remoteSchedule).forEach(key => {
+                    const date = new Date(key);
+                    if (date.getDay() === 0) { // It's a Sunday (old logic)
+                        needsMigration = true;
+                        const days: Day[] = remoteSchedule[key];
+                        days.forEach(day => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    } else {
+                        if (!migrated[key]) migrated[key] = [];
+                        remoteSchedule[key].forEach((day: Day) => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    }
+                });
+
+                const finalSchedule = needsMigration ? migrated : remoteSchedule;
+                setSchedule(finalSchedule);
                 setIsSyncing(false);
+                
+                // If we migrated, save the new format back to Firestore
+                if (needsMigration && firebaseUser.uid) {
+                    debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
+                }
             });
             return () => unsubscribeSchedule();
         }
@@ -171,8 +244,42 @@ const App: React.FC = () => {
         try {
             const remoteSchedule = await fetchScheduleFromFirestore(firebaseUser.uid);
             if (remoteSchedule) {
-                setSchedule(remoteSchedule);
+                // --- MIGRATION: Sunday-start to Monday-start for Remote Data ---
+                const migrated: Schedule = {};
+                let needsMigration = false;
+
+                Object.keys(remoteSchedule).forEach(key => {
+                    const date = new Date(key);
+                    if (date.getDay() === 0) { // It's a Sunday (old logic)
+                        needsMigration = true;
+                        const days: Day[] = remoteSchedule[key];
+                        days.forEach(day => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    } else {
+                        if (!migrated[key]) migrated[key] = [];
+                        remoteSchedule[key].forEach((day: Day) => {
+                            const newId = getWeekId(day.date);
+                            if (!migrated[newId]) migrated[newId] = [];
+                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                                migrated[newId].push(day);
+                            }
+                        });
+                    }
+                });
+
+                const finalSchedule = needsMigration ? migrated : remoteSchedule;
+                setSchedule(finalSchedule);
                 alert("✅ Turnos descargados correctamente desde la nube.");
+                
+                // If we migrated, save the new format back to Firestore
+                if (needsMigration && firebaseUser.uid) {
+                    debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
+                }
             } else {
                 alert("ℹ️ No se encontraron turnos en la nube para tu usuario.");
             }
