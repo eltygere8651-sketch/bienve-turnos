@@ -4,20 +4,50 @@ import { getWeekTitle, getWeekId, formatDayDate } from '../utils/dateUtils';
 import { formatShift } from './scheduleService';
 
 const addHeader = async (doc: jsPDF) => {
+    // Header background
     doc.setFillColor("#1E293B");
     doc.rect(0, 0, 210, 35, 'F');
     
-    doc.setTextColor("#FFFFFF");
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.text("REGISTRO DE JORNADA", 15, 22);
+    // Logo (Replicating the app's LogoIcon)
+    const logoX = 180;
+    const logoY = 8;
     
-    doc.setFontSize(10);
+    // The "B" shape (Red Gradient substitute)
+    doc.setFillColor("#DC2626");
+    // Top part of B
+    doc.roundedRect(logoX + 4, logoY + 1, 8, 8, 4, 4, 'F');
+    // Bottom part of B
+    doc.roundedRect(logoX + 4, logoY + 8, 10, 10, 5, 5, 'F');
+    // Straight left edge of B
+    doc.rect(logoX + 4, logoY + 1, 4, 17, 'F');
+    
+    // The Tray (Darker Red)
+    doc.setFillColor("#B91C1C");
+    doc.roundedRect(logoX, logoY + 19, 18, 1.5, 0.7, 0.7, 'F');
+    
+    // Waiter Silhouette (Black, positioned like in the app)
+    doc.setFillColor("#000000");
+    // Head
+    doc.circle(logoX + 9, logoY + 10, 1.2, 'F');
+    // Torso
+    doc.rect(logoX + 7.5, logoY + 12, 3, 4, 'F');
+    // Arm with tray
+    doc.rect(logoX + 10.5, logoY + 13.5, 3, 0.6, 'F'); // Arm
+    doc.rect(logoX + 12.5, logoY + 12.5, 0.5, 2, 'F'); // Hand/Tray support
+    doc.rect(logoX + 11.5, logoY + 12.5, 3, 0.4, 'F'); // Small tray
+    
+    doc.setTextColor("#FFFFFF");
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text("REGISTRO DE JORNADA", 15, 20);
+    
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
+    doc.setTextColor("#94A3B8");
     const dateStr = new Date().toLocaleDateString('es-ES', { 
         year: 'numeric', month: 'long', day: 'numeric' 
     });
-    doc.text(`Generado el: ${dateStr}`, 15, 28);
+    doc.text(`Documento oficial generado el: ${dateStr}`, 15, 27);
 };
 
 const saveOrSharePdf = async (doc: jsPDF, fileName: string, shareText: string) => {
@@ -152,6 +182,24 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
     doc.text(`Total de Horas (en periodo): ${totalHours.toFixed(2)}`, 15, yPos);
     yPos += 7;
     doc.text(`Horas Extra (calculadas en periodo): ${overtimeHours.toFixed(2)}`, 15, yPos);
+    
+    // Signature message
+    yPos += 20;
+    if (yPos > 270) {
+        doc.addPage();
+        await addHeader(doc);
+        yPos = 45;
+    }
+    
+    doc.setDrawColor("#E2E8F0");
+    doc.setLineWidth(0.2);
+    doc.line(15, yPos, 100, yPos);
+    yPos += 5;
+    
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor("#64748B");
+    doc.text("Documento generado automáticamente por Bienve App", 15, yPos);
     
     const shareText = `Horario del ${formatDayDate(startDate)} al ${formatDayDate(endDate)}: ${totalHours.toFixed(2)}h totales, ${overtimeHours.toFixed(2)}h extra.`;
     await saveOrSharePdf(doc, `horario_periodo_${periodId}.pdf`, shareText);
