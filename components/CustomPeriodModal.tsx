@@ -24,12 +24,12 @@ const CustomPeriodModal: React.FC<CustomPeriodModalProps> = ({ isOpen, onClose, 
         const [sY, sM, sD] = startDate.split('-').map(Number);
         const [eY, eM, eD] = endDate.split('-').map(Number);
 
-        // Create date objects in UTC to represent the selected calendar days without timezone shifts.
-        const start = new Date(Date.UTC(sY, sM - 1, sD));
-        const end = new Date(Date.UTC(eY, eM - 1, eD));
+        // Create date objects in local time to represent the selected calendar days.
+        const start = new Date(sY, sM - 1, sD);
+        const end = new Date(eY, eM - 1, eD);
         
         // Set time to the very end of the selected day to ensure the period is inclusive.
-        end.setUTCHours(23, 59, 59, 999);
+        end.setHours(23, 59, 59, 999);
         
         if (start > end) {
             setError('La fecha de inicio no puede ser posterior a la fecha de fin.');

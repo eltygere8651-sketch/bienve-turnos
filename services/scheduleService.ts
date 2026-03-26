@@ -54,35 +54,8 @@ export const parseShiftParts = (shift: string): ShiftPart[] => {
                     parts.push({ start, end });
                 }
             }
-            i++;
-        } else {
-            // Case 2: Space separated range? (e.g., "13:30 17:30")
-            // Check if this token is a time AND the next token is a time (and not a range itself)
-            const start = parseTimeToHours(token);
-            
-            if (!isNaN(start)) {
-                // Peek at next token
-                if (i + 1 < tokens.length) {
-                    const nextToken = tokens[i+1];
-                    // Verify next token is NOT a hyphenated range (e.g. avoid merging "16" with "20-23")
-                    if (!nextToken.includes('-')) {
-                        const end = parseTimeToHours(nextToken);
-                        if (!isNaN(end)) {
-                            // We found a pair: "start" "end"
-                            let adjustedEnd = end;
-                            if (adjustedEnd < start) adjustedEnd += 24;
-                            if (adjustedEnd === 0 && start > 0) adjustedEnd = 24;
-                            
-                            parts.push({ start, end: adjustedEnd });
-                            i += 2; // Consume both tokens
-                            continue;
-                        }
-                    }
-                }
-            }
-            // If no pattern matched, move to next token
-            i++;
         }
+        i++;
     }
     
     return parts;

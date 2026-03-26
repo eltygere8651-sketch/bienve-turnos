@@ -40,3 +40,11 @@ export interface DriveUser {
 export interface DriveScheduleData {
     schedule: Schedule;
 }
+
+export interface CustomPeriodPdfData {
+    periodDays: Day[];
+    startDate: Date;
+    endDate: Date;
+    totalHours: number;
+    overtimeHours: number;
+}

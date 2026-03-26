@@ -3,7 +3,9 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Day, Schedule, DayStatus, FirebaseUser, FirebaseConfig } from './types';
 import { getWeekId, getWeekDays, getWeekTitle } from './utils/dateUtils';
 import { calculateHoursFromShift } from './services/scheduleService';
-import { downloadCustomPeriodPdf } from './services/pdfService';
+import { 
+    downloadCustomPeriodPdf 
+} from './services/pdfService';
 import Header from './components/Header';
 import WeekView from './components/WeekView';
 import Summary from './components/Summary';
@@ -286,6 +288,9 @@ const App: React.FC = () => {
         days.forEach(date => {
             const wId = getWeekId(date);
             const weekData = schedule[wId];
+            
+            // We need to be careful with toDateString() if 'date' is UTC and 'schedule' dates are local.
+            // But in handleDownloadCustomPeriod we now ensure loopDate is created correctly.
             const foundDay = weekData?.find(d => d.date.toDateString() === date.toDateString());
             const dayToUse = foundDay || { date, shift: '', status: DayStatus.Work };
             relevantDays.push(dayToUse);
@@ -297,8 +302,11 @@ const App: React.FC = () => {
             }
         });
 
+        // Simple calculation: 40h per 7 days.
+        // If the period is exactly N weeks, target is N * 40.
+        // If there are extra holidays (more than 2 per week), we subtract 8h for each.
         const totalWeeks = days.length / 7;
-        const expectedDaysOff = totalWeeks * 2;
+        const expectedDaysOff = Math.floor(totalWeeks * 2);
         const extraDaysOff = Math.max(0, daysOff - expectedDaysOff);
         const targetHours = Math.max(0, (totalWeeks * 40) - (extraDaysOff * 8));
         const totalOvertime = totalH - targetHours;
