@@ -2,22 +2,22 @@
 export const getWeekId = (date: Date): string => {
     const d = new Date(date);
     const day = d.getDay(); // 0=Sun, 1=Mon...
-    const diff = d.getDate() - day; // Adjust to Sunday
-    const sunday = new Date(d.setDate(diff));
-    return sunday.toISOString().split('T')[0];
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // Adjust to Monday
+    const monday = new Date(d.setDate(diff));
+    return monday.toISOString().split('T')[0];
 };
 
 export const getWeekDays = (date: Date): Date[] => {
     const d = new Date(date);
     const day = d.getDay(); // 0=Sun, 1=Mon...
-    const diff = d.getDate() - day; // Adjust to Sunday
-    const sunday = new Date(d.setDate(diff));
-    sunday.setHours(0, 0, 0, 0);
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // Adjust to Monday
+    const monday = new Date(d.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
 
     const days: Date[] = [];
     for (let i = 0; i < 7; i++) {
-        const nextDay = new Date(sunday);
-        nextDay.setDate(sunday.getDate() + i);
+        const nextDay = new Date(monday);
+        nextDay.setDate(monday.getDate() + i);
         days.push(nextDay);
     }
     return days;
@@ -25,10 +25,8 @@ export const getWeekDays = (date: Date): Date[] => {
 
 export const getWeekTitle = (date: Date): string => {
     const weekDays = getWeekDays(date);
-    // Title shows Monday to Sunday (even if list is Sun-Sat)
-    const monday = new Date(weekDays[1]);
-    const sunday = new Date(weekDays[6]);
-    sunday.setDate(sunday.getDate() + 1);
+    const monday = weekDays[0];
+    const sunday = weekDays[6];
     
     const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
 
