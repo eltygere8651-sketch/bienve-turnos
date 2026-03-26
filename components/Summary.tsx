@@ -5,6 +5,8 @@ import { DownloadIcon, WhatsAppIcon, TelegramIcon } from './icons';
 interface SummaryProps {
     totalHours: number;
     overtimeHours: number;
+    monthlyTotalHours: number;
+    monthlyOvertimeHours: number;
     onOpenCustomPeriodModal: () => void;
     isDownloadingCustomPeriod: boolean;
 }
@@ -12,10 +14,12 @@ interface SummaryProps {
 const Summary: React.FC<SummaryProps> = ({ 
     totalHours, 
     overtimeHours, 
+    monthlyTotalHours,
+    monthlyOvertimeHours,
     onOpenCustomPeriodModal,
     isDownloadingCustomPeriod
 }) => {
-    const shareText = `Resumen de Horas:\nTotal: ${totalHours.toFixed(2)}h\nExtras: ${overtimeHours.toFixed(2)}h`;
+    const shareText = `Resumen de Horas:\nSemana: ${totalHours.toFixed(2)}h (Extra: ${overtimeHours.toFixed(2)}h)\nMes: ${monthlyTotalHours.toFixed(2)}h (Extra: ${monthlyOvertimeHours.toFixed(2)}h)`;
     
     const shareWhatsApp = () => {
         const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
@@ -31,16 +35,39 @@ const Summary: React.FC<SummaryProps> = ({
         <footer className="sticky bottom-0 bg-gray-800/90 backdrop-blur-md border-t border-gray-700 p-3 shadow-2xl z-20">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
                 {/* --- Sección Izquierda: Horas --- */}
-                <div className="flex space-x-6 sm:space-x-8 text-center items-center">
-                    <div>
-                        <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider font-bold">Totales</p>
-                        <p className="text-xl sm:text-2xl font-black text-red-500">{totalHours.toFixed(2)}</p>
+                <div className="flex space-x-4 sm:space-x-8 text-center items-center">
+                    <div className="flex flex-col items-center">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Semana</p>
+                        <div className="flex space-x-3">
+                            <div>
+                                <p className="text-[9px] text-gray-400 uppercase">Total</p>
+                                <p className="text-sm sm:text-base font-black text-red-500">{totalHours.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[9px] text-gray-400 uppercase">Extra</p>
+                                <p className={`text-sm sm:text-base font-black ${overtimeHours > 0 ? 'text-yellow-400' : 'text-gray-200'}`}>
+                                    {overtimeHours.toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider font-bold">Extra</p>
-                        <p className={`text-xl sm:text-2xl font-black ${overtimeHours > 0 ? 'text-yellow-400' : 'text-gray-200'}`}>
-                            {overtimeHours.toFixed(2)}
-                        </p>
+
+                    <div className="h-10 w-px bg-gray-700 mx-1"></div>
+
+                    <div className="flex flex-col items-center">
+                        <p className="text-[10px] text-red-400 uppercase tracking-wider font-bold">Mes Actual</p>
+                        <div className="flex space-x-4">
+                            <div>
+                                <p className="text-[9px] text-gray-400 uppercase">Total</p>
+                                <p className="text-base sm:text-xl font-black text-red-500">{monthlyTotalHours.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[9px] text-gray-400 uppercase">Extra</p>
+                                <p className={`text-base sm:text-xl font-black ${monthlyOvertimeHours > 0 ? 'text-yellow-400' : 'text-gray-200'}`}>
+                                    {monthlyOvertimeHours.toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     
                     {/* Sharing Icons */}
