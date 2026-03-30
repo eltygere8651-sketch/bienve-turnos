@@ -487,6 +487,7 @@ const App: React.FC = () => {
             <Summary 
                 totalHours={totalHours} 
                 overtimeHours={overtimeHours}
+                weekDays={weekDays}
                 onOpenCustomPeriodModal={() => setIsCustomPeriodModalOpen(true)}
                 isDownloadingCustomPeriod={isDownloadingCustomPeriod}
             />

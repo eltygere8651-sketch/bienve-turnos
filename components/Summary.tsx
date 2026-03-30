@@ -1,10 +1,13 @@
 
-import React from 'react';
-import { DownloadIcon, WhatsAppIcon, TelegramIcon } from './icons';
+import React, { useState } from 'react';
+import { DownloadIcon, WhatsAppIcon, TelegramIcon, ShareIcon } from './icons';
+import { Day } from '../types';
+import { downloadWeekPdf } from '../services/pdfService';
 
 interface SummaryProps {
     totalHours: number;
     overtimeHours: number;
+    weekDays: Day[];
     onOpenCustomPeriodModal: () => void;
     isDownloadingCustomPeriod: boolean;
 }
@@ -12,11 +15,24 @@ interface SummaryProps {
 const Summary: React.FC<SummaryProps> = ({ 
     totalHours, 
     overtimeHours, 
+    weekDays,
     onOpenCustomPeriodModal,
     isDownloadingCustomPeriod
 }) => {
+    const [isSharingPdf, setIsSharingPdf] = useState(false);
     const shareText = `Resumen de Horas:\nSemana: ${totalHours.toFixed(2)}h (Extra: ${overtimeHours.toFixed(2)}h)`;
     
+    const handleSharePdf = async () => {
+        setIsSharingPdf(true);
+        try {
+            await downloadWeekPdf(weekDays, totalHours, overtimeHours);
+        } catch (error) {
+            console.error("Error sharing PDF", error);
+        } finally {
+            setIsSharingPdf(false);
+        }
+    };
+
     const shareWhatsApp = () => {
         const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
         window.open(url, '_blank');
@@ -51,16 +67,25 @@ const Summary: React.FC<SummaryProps> = ({
                     {/* Sharing Icons */}
                     <div className="flex gap-2 ml-2 border-l border-gray-700 pl-4">
                         <button 
+                            onClick={handleSharePdf}
+                            disabled={isSharingPdf}
+                            className="p-1.5 bg-red-600/20 text-red-500 rounded-full hover:bg-red-600/30 transition-colors flex items-center gap-1 px-3"
+                            title="Compartir PDF de la semana"
+                        >
+                            <ShareIcon className="w-4 h-4" />
+                            <span className="text-[10px] font-bold uppercase">{isSharingPdf ? '...' : 'PDF'}</span>
+                        </button>
+                        <button 
                             onClick={shareWhatsApp}
                             className="p-1.5 bg-green-600/20 text-green-500 rounded-full hover:bg-green-600/30 transition-colors"
-                            title="Compartir en WhatsApp"
+                            title="Compartir Texto en WhatsApp"
                         >
                             <WhatsAppIcon className="w-4 h-4" />
                         </button>
                         <button 
                             onClick={shareTelegram}
                             className="p-1.5 bg-blue-600/20 text-blue-400 rounded-full hover:bg-blue-600/30 transition-colors"
-                            title="Compartir en Telegram"
+                            title="Compartir Texto en Telegram"
                         >
                             <TelegramIcon className="w-4 h-4" />
                         </button>
