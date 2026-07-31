@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { Day, DayStatus, CustomPeriodPdfData } from '../types';
 import { getWeekTitle, getWeekId, formatDayDate } from '../utils/dateUtils';
-import { formatShift } from './scheduleService';
+import { formatShift, calculateHoursFromShift } from './scheduleService';
 
 const addHeader = async (doc: jsPDF) => {
     // Header background
@@ -41,13 +41,7 @@ const addHeader = async (doc: jsPDF) => {
     doc.setFont('helvetica', 'bold');
     doc.text("REGISTRO DE JORNADA", 15, 20);
     
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor("#94A3B8");
-    const dateStr = new Date().toLocaleDateString('es-ES', { 
-        year: 'numeric', month: 'long', day: 'numeric' 
-    });
-    doc.text(`Documento oficial generado el: ${dateStr}`, 15, 27);
+    
 };
 
 const saveOrSharePdf = async (doc: jsPDF, fileName: string, shareText: string) => {
@@ -147,6 +141,21 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
 
         weekDays.sort((a, b) => a.date.getTime() - b.date.getTime());
         
+        let weekWorkHours = 0;
+        let weekDaysOff = 0;
+        
+        weekDays.forEach((day: Day) => {
+            if (day.status === DayStatus.Work) {
+                weekWorkHours += calculateHoursFromShift(day.shift);
+            } else if (day.status === DayStatus.Holiday || day.status === DayStatus.Vacation) {
+                weekDaysOff++;
+            }
+        });
+
+        const extraDaysOff = Math.max(0, weekDaysOff - 2);
+        const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+        const weekOvertime = Math.max(0, weekWorkHours - weeklyTarget);
+
         weekDays.forEach((day: Day) => {
             const dayIndex = day.date.getDay() === 0 ? 6 : day.date.getDay() - 1;
             const dayName = dayNames[dayIndex];
@@ -167,7 +176,12 @@ export const downloadCustomPeriodPdf = async (data: CustomPeriodPdfData) => {
             yPos += 4;
         });
 
-        yPos += 3;
+        yPos += 2;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor("#475569");
+        doc.text(`Resumen semanal: Total ${weekWorkHours.toFixed(2)}h, Extra ${weekOvertime.toFixed(2)}h`, 20, yPos);
+        yPos += 6;
     }
 
     if (yPos > 275) {

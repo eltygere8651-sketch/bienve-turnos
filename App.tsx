@@ -427,14 +427,31 @@ const App: React.FC = () => {
             }
         });
 
-        // Simple calculation: 40h per 7 days.
-        // If the period is exactly N weeks, target is N * 40.
-        // If there are extra holidays (more than 2 per week), we subtract 8h for each.
-        const totalWeeks = days.length / 7;
-        const expectedDaysOff = Math.floor(totalWeeks * 2);
-        const extraDaysOff = Math.max(0, daysOff - expectedDaysOff);
-        const targetHours = Math.max(0, (totalWeeks * 40) - (extraDaysOff * 8));
-        const totalOvertime = totalH - targetHours;
+        // Group days by week using getWeekId
+        const weeks: Record<string, { daysOff: number; workHours: number; }> = {};
+        
+        relevantDays.forEach(day => {
+            const wId = getWeekId(day.date);
+            if (!weeks[wId]) {
+                weeks[wId] = { daysOff: 0, workHours: 0 };
+            }
+            
+            if (day.status === DayStatus.Work) {
+                weeks[wId].workHours += calculateHoursFromShift(day.shift);
+            } else if (day.status === DayStatus.Holiday || day.status === DayStatus.Vacation) {
+                weeks[wId].daysOff++;
+            }
+        });
+
+        let totalOvertime = 0;
+        Object.values(weeks).forEach(week => {
+            const extraDaysOff = Math.max(0, week.daysOff - 2);
+            const weeklyTarget = Math.max(0, 40 - (extraDaysOff * 8));
+            const overtime = week.workHours - weeklyTarget;
+            if (overtime > 0) {
+                totalOvertime += overtime;
+            }
+        });
 
         return {
             periodDays: relevantDays.filter(d => d.shift || d.status !== DayStatus.Work),
