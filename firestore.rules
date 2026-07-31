@@ -36,7 +36,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.keys().hasOnly(['schedule', 'lastUpdated', 'lastConnectionCheck', 'role']) &&
-             (data.schedule is string && data.schedule.size() < 1000000) &&
+             (!('schedule' in data) || (data.schedule is string && data.schedule.size() < 1000000)) &&
              (!('lastUpdated' in data) || data.lastUpdated is timestamp) &&
              (!('lastConnectionCheck' in data) || data.lastConnectionCheck is string) &&
              (!('role' in data) || data.role in ['admin', 'user']);
@@ -44,7 +44,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       // Users can only read their own data unless they are an admin
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin() || userId == 'nefta';
       
       // Users can only create/update their own data
       // They cannot set their own role to 'admin' unless they are already an admin

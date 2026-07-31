@@ -1,7 +1,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, Auth, User, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, Firestore, enableIndexedDbPersistence, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, Firestore, enableIndexedDbPersistence, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 import { FirebaseConfig, Schedule } from '../types';
 
 let app: FirebaseApp | null = null;
@@ -131,7 +131,7 @@ export const saveScheduleToFirestore = async (userId: string, schedule: Schedule
         // Guardamos el horario como string JSON. Firestore maneja la sincronización.
         await setDoc(doc(db, "users", userId), {
             schedule: JSON.stringify(schedule),
-            lastUpdated: new Date()
+            lastUpdated: serverTimestamp()
         }, { merge: true });
         
     } catch (error) {
