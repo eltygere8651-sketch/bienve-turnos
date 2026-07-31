@@ -166,7 +166,7 @@ export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedu
     }
 };
 
-export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedule) => void) => {
+export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedule) => void, onEmpty?: () => void) => {
     if (!db) return () => {};
     
     const path = `users/${userId}`;
@@ -189,7 +189,11 @@ export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedul
                 } catch (e) {
                     console.error("Error parsing schedule from Firestore:", e);
                 }
+            } else if (onEmpty) {
+                onEmpty();
             }
+        } else if (onEmpty) {
+            onEmpty();
         }
     }, (error) => {
         handleFirestoreError(error, OperationType.GET, path);

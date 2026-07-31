@@ -160,6 +160,8 @@ const App: React.FC = () => {
     useEffect(() => {
         if (firebaseUser?.uid) {
             setIsSyncing(true);
+            let isInitialSync = true;
+            
             const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
                 // --- MIGRATION: Sunday-start to Monday-start for Remote Data ---
                 const migrated: Schedule = {};
@@ -192,10 +194,27 @@ const App: React.FC = () => {
                 const finalSchedule = needsMigration ? migrated : remoteSchedule;
                 setSchedule(finalSchedule);
                 setIsSyncing(false);
+                isInitialSync = false;
                 
                 // If we migrated, save the new format back to Firestore
                 if (needsMigration && firebaseUser.uid) {
                     debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
+                }
+            }, () => {
+                // onEmpty callback: Firestore document does not exist or has no schedule
+                if (isInitialSync) {
+                    setIsSyncing(false);
+                    isInitialSync = false;
+                    
+                    // If we have local data, automatically upload it to Firestore
+                    if (Object.keys(schedule).length > 0 && firebaseUser.uid) {
+                        saveScheduleToFirestore(firebaseUser.uid, schedule).then(() => {
+                            alert("✅ Tus turnos locales han sido subidos a la nube con éxito.");
+                        }).catch(e => {
+                            console.error("Failed to upload local data on initial sync", e);
+                            alert("❌ Hubo un error al subir tus turnos locales a la nube.");
+                        });
+                    }
                 }
             });
             return () => unsubscribeSchedule();
@@ -221,6 +240,8 @@ const App: React.FC = () => {
     const handleFirebaseLogout = async () => {
         await logoutUser();
         setFirebaseUser(null);
+        setSchedule({}); // Limpiar estado de React
+        localStorage.removeItem(SCHEDULE_STORAGE_KEY); // Limpiar caché local
     };
 
     const handleTestConnection = async () => {
