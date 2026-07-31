@@ -178,8 +178,13 @@ const App: React.FC = () => {
                         if (!normalized[correctId]) {
                             normalized[correctId] = [];
                         }
-                        if (!normalized[correctId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                        const existingIdx = normalized[correctId].findIndex(d => d.date.toDateString() === day.date.toDateString());
+                        if (existingIdx === -1) {
                             normalized[correctId].push(day);
+                        } else {
+                            if (day.shift || day.status !== DayStatus.Work) {
+                                normalized[correctId][existingIdx] = day;
+                            }
                         }
                     });
                 });
@@ -276,8 +281,13 @@ const App: React.FC = () => {
                         if (!normalized[correctId]) {
                             normalized[correctId] = [];
                         }
-                        if (!normalized[correctId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                        const existingIdx = normalized[correctId].findIndex(d => d.date.toDateString() === day.date.toDateString());
+                        if (existingIdx === -1) {
                             normalized[correctId].push(day);
+                        } else {
+                            if (day.shift || day.status !== DayStatus.Work) {
+                                normalized[correctId][existingIdx] = day;
+                            }
                         }
                     });
                 });
