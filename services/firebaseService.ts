@@ -166,6 +166,33 @@ export const fetchScheduleFromFirestore = async (userId: string): Promise<Schedu
     }
 };
 
+export const migrateNeftaSchedule = async (userId: string): Promise<Schedule | null> => {
+    if (!db) return null;
+    try {
+        const neftaDocRef = doc(db, "users", "nefta");
+        const neftaDoc = await getDoc(neftaDocRef);
+        if (neftaDoc.exists()) {
+            const data = neftaDoc.data();
+            if (data && data.schedule) {
+                const parsedSchedule = JSON.parse(data.schedule);
+                const rehydratedSchedule: Schedule = {};
+                for (const weekId in parsedSchedule) {
+                    rehydratedSchedule[weekId] = parsedSchedule[weekId].map((day: any) => ({
+                        ...day,
+                        date: new Date(day.date)
+                    }));
+                }
+                // Save it to the new user
+                await saveScheduleToFirestore(userId, rehydratedSchedule);
+                return rehydratedSchedule;
+            }
+        }
+    } catch (error) {
+        console.error("Error during nefta migration:", error);
+    }
+    return null;
+};
+
 export const subscribeToSchedule = (userId: string, onUpdate: (schedule: Schedule) => void, onEmpty?: () => void) => {
     if (!db) return () => {};
     

@@ -19,7 +19,7 @@ import ConfirmModal from './components/ConfirmModal';
 import FirebaseConfigModal from './components/FirebaseConfigModal';
 
 import { saveFirebaseConfig, getFirebaseConfig, isFirebaseConfigured } from './services/apiKeyService';
-import { initFirebase, loginWithGoogle, logoutUser, subscribeToAuthChanges, subscribeToSchedule, saveScheduleToFirestore, testFirestoreConnection, fetchScheduleFromFirestore } from './services/firebaseService';
+import { initFirebase, loginWithGoogle, logoutUser, subscribeToAuthChanges, subscribeToSchedule, saveScheduleToFirestore, testFirestoreConnection, fetchScheduleFromFirestore, migrateNeftaSchedule } from './services/firebaseService';
 import { useDebouncedCallback } from './hooks/useDebouncedCallback';
 
 const SCHEDULE_STORAGE_KEY = 'bienveAppSchedule';
@@ -119,7 +119,7 @@ const App: React.FC = () => {
 
     // --- Firebase Logic ---
     useEffect(() => {
-        if (isAuthenticated && isFirebaseConfigured()) {
+        if (isFirebaseConfigured()) {
             const config = getFirebaseConfig();
             if (config) {
                 try {
@@ -132,6 +132,8 @@ const App: React.FC = () => {
                                 email: user.email,
                                 photoURL: user.photoURL
                             });
+                            // Si se logueó con Firebase, marcamos la app como autenticada automáticamente
+                            setIsAuthenticated(true);
                         } else {
                             setFirebaseUser(null);
                         }
@@ -142,7 +144,7 @@ const App: React.FC = () => {
                 }
             }
         }
-    }, [isAuthenticated]);
+    }, []);
 
     const debouncedSaveToFirestore = useDebouncedCallback(async (currentSchedule: Schedule, uid: string) => {
         if (!uid) return;
@@ -200,20 +202,26 @@ const App: React.FC = () => {
                 if (needsMigration && firebaseUser.uid) {
                     debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
                 }
-            }, () => {
+            }, async () => {
                 // onEmpty callback: Firestore document does not exist or has no schedule
                 if (isInitialSync) {
                     setIsSyncing(false);
                     isInitialSync = false;
                     
-                    // If we have local data, automatically upload it to Firestore
-                    if (Object.keys(schedule).length > 0 && firebaseUser.uid) {
-                        saveScheduleToFirestore(firebaseUser.uid, schedule).then(() => {
-                            alert("✅ Tus turnos locales han sido subidos a la nube con éxito.");
-                        }).catch(e => {
-                            console.error("Failed to upload local data on initial sync", e);
-                            alert("❌ Hubo un error al subir tus turnos locales a la nube.");
-                        });
+                    if (firebaseUser.uid) {
+                        // Intentar migrar desde 'nefta' primero
+                        const migrated = await migrateNeftaSchedule(firebaseUser.uid);
+                        if (migrated) {
+                            alert("✅ Tus turnos han sido migrados exitosamente a tu nueva cuenta.");
+                        } else if (Object.keys(schedule).length > 0) {
+                            // If we have local data and no migration happened, upload local
+                            saveScheduleToFirestore(firebaseUser.uid, schedule).then(() => {
+                                alert("✅ Tus turnos locales han sido subidos a la nube con éxito.");
+                            }).catch(e => {
+                                console.error("Failed to upload local data on initial sync", e);
+                                alert("❌ Hubo un error al subir tus turnos locales a la nube.");
+                            });
+                        }
                     }
                 }
             });
