@@ -4,7 +4,13 @@ export const getWeekId = (date: Date): string => {
     const day = d.getDay(); // 0=Sun, 1=Mon...
     const diff = d.getDate() - (day === 0 ? 6 : day - 1); // Adjust to Monday
     const monday = new Date(d.setDate(diff));
-    return monday.toISOString().split('T')[0];
+    
+    // Generate ID using local timezone to prevent UTC date shift bugs
+    const year = monday.getFullYear();
+    const month = String(monday.getMonth() + 1).padStart(2, '0');
+    const dayOfMonth = String(monday.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${dayOfMonth}`;
 };
 
 export const getWeekDays = (date: Date): Date[] => {

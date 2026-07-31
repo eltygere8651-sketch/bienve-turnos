@@ -165,42 +165,32 @@ const App: React.FC = () => {
             let isInitialSync = true;
             
             const unsubscribeSchedule = subscribeToSchedule(firebaseUser.uid, (remoteSchedule) => {
-                // --- MIGRATION: Sunday-start to Monday-start for Remote Data ---
-                const migrated: Schedule = {};
+                // --- Normalize Schedule Keys ---
+                const normalized: Schedule = {};
                 let needsMigration = false;
 
                 Object.keys(remoteSchedule).forEach(key => {
-                    const date = new Date(key);
-                    if (date.getDay() === 0) { // It's a Sunday (old logic)
-                        needsMigration = true;
-                        const days: Day[] = remoteSchedule[key];
-                        days.forEach(day => {
-                            const newId = getWeekId(day.date);
-                            if (!migrated[newId]) migrated[newId] = [];
-                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
-                                migrated[newId].push(day);
-                            }
-                        });
-                    } else {
-                        if (!migrated[key]) migrated[key] = [];
-                        remoteSchedule[key].forEach((day: Day) => {
-                            const newId = getWeekId(day.date);
-                            if (!migrated[newId]) migrated[newId] = [];
-                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
-                                migrated[newId].push(day);
-                            }
-                        });
-                    }
+                    remoteSchedule[key].forEach((day: Day) => {
+                        const correctId = getWeekId(day.date);
+                        if (correctId !== key) {
+                            needsMigration = true;
+                        }
+                        if (!normalized[correctId]) {
+                            normalized[correctId] = [];
+                        }
+                        if (!normalized[correctId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                            normalized[correctId].push(day);
+                        }
+                    });
                 });
 
-                const finalSchedule = needsMigration ? migrated : remoteSchedule;
-                setSchedule(finalSchedule);
+                setSchedule(normalized);
                 setIsSyncing(false);
                 isInitialSync = false;
                 
-                // If we migrated, save the new format back to Firestore
+                // If keys were wrong, save the normalized format back to Firestore
                 if (needsMigration && firebaseUser.uid) {
-                    debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
+                    debouncedSaveToFirestore(normalized, firebaseUser.uid);
                 }
             }, async () => {
                 // onEmpty callback: Firestore document does not exist or has no schedule
@@ -273,41 +263,30 @@ const App: React.FC = () => {
         try {
             const remoteSchedule = await fetchScheduleFromFirestore(firebaseUser.uid);
             if (remoteSchedule) {
-                // --- MIGRATION: Sunday-start to Monday-start for Remote Data ---
-                const migrated: Schedule = {};
+                // --- Normalize Schedule Keys ---
+                const normalized: Schedule = {};
                 let needsMigration = false;
 
                 Object.keys(remoteSchedule).forEach(key => {
-                    const date = new Date(key);
-                    if (date.getDay() === 0) { // It's a Sunday (old logic)
-                        needsMigration = true;
-                        const days: Day[] = remoteSchedule[key];
-                        days.forEach(day => {
-                            const newId = getWeekId(day.date);
-                            if (!migrated[newId]) migrated[newId] = [];
-                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
-                                migrated[newId].push(day);
-                            }
-                        });
-                    } else {
-                        if (!migrated[key]) migrated[key] = [];
-                        remoteSchedule[key].forEach((day: Day) => {
-                            const newId = getWeekId(day.date);
-                            if (!migrated[newId]) migrated[newId] = [];
-                            if (!migrated[newId].find(d => d.date.toDateString() === day.date.toDateString())) {
-                                migrated[newId].push(day);
-                            }
-                        });
-                    }
+                    remoteSchedule[key].forEach((day: Day) => {
+                        const correctId = getWeekId(day.date);
+                        if (correctId !== key) {
+                            needsMigration = true;
+                        }
+                        if (!normalized[correctId]) {
+                            normalized[correctId] = [];
+                        }
+                        if (!normalized[correctId].find(d => d.date.toDateString() === day.date.toDateString())) {
+                            normalized[correctId].push(day);
+                        }
+                    });
                 });
 
-                const finalSchedule = needsMigration ? migrated : remoteSchedule;
-                setSchedule(finalSchedule);
+                setSchedule(normalized);
                 alert("✅ Turnos descargados correctamente desde la nube.");
                 
-                // If we migrated, save the new format back to Firestore
                 if (needsMigration && firebaseUser.uid) {
-                    debouncedSaveToFirestore(finalSchedule, firebaseUser.uid);
+                    debouncedSaveToFirestore(normalized, firebaseUser.uid);
                 }
             } else {
                 alert("ℹ️ No se encontraron turnos en la nube para tu usuario.");
